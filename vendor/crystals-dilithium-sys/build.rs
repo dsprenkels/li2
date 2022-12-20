@@ -4,11 +4,25 @@ extern crate cc;
 use std::path::PathBuf;
 
 fn main() {
-    const MODES: [&str; 3] = ["2", "3", "5"];
+    let modes = ["3"];
 
     println!("cargo:rerun-if-changed=wrapper.h");
 
-    for mode in MODES {
+    for file in &[
+        "crystals-dilithium/ref/sign.c",
+        "crystals-dilithium/ref/packing.c",
+        "crystals-dilithium/ref/polyvec.c",
+        "crystals-dilithium/ref/poly.c",
+        "crystals-dilithium/ref/ntt.c",
+        "crystals-dilithium/ref/reduce.c",
+        "crystals-dilithium/ref/rounding.c",
+        "crystals-dilithium/ref/fips202.c",
+        "crystals-dilithium/ref/symmetric-shake.c",
+    ] {
+        println!("cargo:rerun-if-changed={}", file);
+    }
+
+    for mode in modes {
         cc::Build::new()
             .shared_flag(true)
             .static_flag(true)
@@ -22,14 +36,24 @@ fn main() {
                 "crystals-dilithium/ref/ntt.c",
                 "crystals-dilithium/ref/reduce.c",
                 "crystals-dilithium/ref/rounding.c",
+                "crystals-dilithium/ref/fips202.c",
+                "crystals-dilithium/ref/symmetric-shake.c",
             ])
             .compile(&format!("dilithium{}", mode)[..]);
     }
 
+    // Compile randombytes part
+    cc::Build::new()
+        .shared_flag(true)
+        .static_flag(true)
+        .include("crystals-dilithium/ref")
+        .files(&["crystals-dilithium/ref/randombytes.c"])
+        .compile("randombytes");
+
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
 
-    for mode in MODES {
+    for mode in modes {
         // The bindgen::Builder is the main entry point
         // to bindgen, and lets you build up options for
         // the resulting bindings.
@@ -41,7 +65,7 @@ fn main() {
                 &format!("#define DILITHIUM_MODE {}", mode)[..],
             )
             .header("wrapper.h")
-            // .define("DILITHIUM_MODE", &format!("{}", mode)[..])
+            .derive_default(true)
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
             .parse_callbacks(Box::new(bindgen::CargoCallbacks))

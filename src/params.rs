@@ -1,4 +1,7 @@
-const N: usize = 256;
+pub(crate) const N: usize = 256;
+pub(crate) const SEEDBYTES: usize = 32;
+pub(crate) const CRHBYTES: usize = 64;
+
 
 pub trait DilithiumTypes {
     type Poly;
@@ -20,9 +23,9 @@ impl DilithiumTypes for GenericTypes {
 
 pub(crate) struct DilithiumImpl {
     // Basic parameters
-    k: u8,
-    l: u8,
-    max_attempts: u16,
+    pub(crate) k: u16,
+    pub(crate) l: u16,
+    pub(crate) max_attempts: u16,
 
     // Impl-dependent functions
     // expand_mask: fn(rho_prime: &[u8], kappa: u16) -> TY::Poly,
@@ -37,7 +40,7 @@ pub(crate) struct DilithiumImpl {
 //     expand_mask,
 // };
 
-const DILTIHIUM3: DilithiumImpl = DilithiumImpl {
+pub(crate) const DILTIHIUM3: DilithiumImpl = DilithiumImpl {
     k: 6,
     l: 5,
     max_attempts: 406,

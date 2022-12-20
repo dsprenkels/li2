@@ -5,7 +5,7 @@
     missing_debug_implementations,
     missing_copy_implementations,
     rust_2018_idioms,
-    trivial_casts,
+    // trivial_casts,
     trivial_numeric_casts,
     unused_qualifications
 )]
@@ -14,3 +14,4 @@
 
 mod variants;
 mod params;
+mod keygen;
