@@ -10,6 +10,7 @@
     unused_qualifications
 )]
 
+#![no_std]
+
 mod variants;
 mod params;
-

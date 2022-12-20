@@ -1,10 +1,13 @@
 [package]
+edition = "2021"
 name = "li2"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.crypto]
-version = "0.4.0"
 features = ["signature"]
+version = "0.4.0"
+
+[dev-dependencies]
+crystals-dilithium-sys = {path = "vendor/crystals-dilithium-sys"}

@@ -28,15 +28,6 @@ pub(crate) struct DilithiumImpl {
     // expand_mask: fn(rho_prime: &[u8], kappa: u16) -> TY::Poly,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_vtable_size() {
-        assert_eq!(core::mem::size_of::<DilithiumImpl>(), 40);
-    }
-}
 
 // const DILTIHIUM2: DilithiumImpl<GenericTypes> = DilithiumImpl {
 //     k: 4,
@@ -62,3 +53,23 @@ const DILTIHIUM3: DilithiumImpl = DilithiumImpl {
 
 //     expand_mask
 // };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crystals_dilithium_sys as refimpl;
+
+    #[test]
+    #[ignore = "still rapidly developing impl"]
+    fn test_vtable_size() {
+        assert_eq!(core::mem::size_of::<DilithiumImpl>(), 0);
+    }
+
+    #[test]
+    fn test_dilithium3_params() {
+        use refimpl::dilithium3::*;
+
+        assert_eq!(u32::from(DILTIHIUM3.k), K);
+        assert_eq!(u32::from(DILTIHIUM3.l), L);
+    }
+}
