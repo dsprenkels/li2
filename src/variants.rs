@@ -1,11 +1,11 @@
 //! # TODO
-//! 
+//!
 //! At this point, the lifetimes of the keys may outlast the lifetimes of
 //! the slices from which they were decoded.  This will prevent us from doing
 //! a very-low memory implementation of Dilithium, because either we have to
 //! copy the keys to a buffer somewhere, or we have to decode the key
 //! immediately; both of which will take up a lot of space.
-//! 
+//!
 //! We will have to add a generic lifetime to the type signature s.t. we can
 //! have keys that are outlived by the buffer on which they are based.
 
@@ -17,77 +17,81 @@ pub const SEED_SIZE: usize = 32;
 /// `DilithiumVariant` specifies the variant of Dilithium.  The variant
 /// specifies which algorithm is executed from a high level.  For example:
 /// 'Randomized NIST-round-3 Dilithium2'.
-/// 
+///
 /// This trait does not indicate anything about the inner workings of the
 /// implementation.  The same `DilithiumVariant` is used, regardless of
 /// the platform is it compiled for.
-pub trait DilithiumVariant {
+pub trait DilithiumVariant: core::fmt::Debug {
+    const SECKEY_SIZE: usize;
+    const PUBKEY_SIZE: usize;
+    const SIG_SIZE: usize;
+
+    type SecretKeyBytes: AsMut<[u8]> + AsRef<[u8]> + core::fmt::Debug;
+    type PublicKeyBytes: AsMut<[u8]> + AsRef<[u8]> + core::fmt::Debug;
+    type SignatureBytes: AsMut<[u8]> + AsRef<[u8]> + core::fmt::Debug;
+
     type SecretKey: signature::Signer<Self::Signature>;
     type PublicKey: signature::Verifier<Self::Signature>;
     type Signature: signature::Signature;
 
-    const SECKEY_SIZE: usize;
-    const PUBKEY_SIZE: usize;
-    const SIG_SIZE: usize;
+    fn new_signature_bytes() -> Self::SignatureBytes;
 }
 
-pub struct SecretKey<const SIZE: usize> {
-    pub(crate) bytes: [u8; SIZE],
+pub struct SecretKey<V: DilithiumVariant> {
+    pub(crate) bytes: V::SecretKeyBytes,
 }
 
-impl<const SIZE: usize> AsRef<[u8]> for SecretKey<SIZE> {
+impl<V: DilithiumVariant> AsRef<[u8]> for SecretKey<V> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes.as_ref()
     }
 }
 
-impl<const SECKEY_SIZE: usize, const SIG_SIZE: usize> signature::Signer<Signature<SIG_SIZE>> for SecretKey<SECKEY_SIZE> {
-    fn try_sign(&self, msg: &[u8]) -> Result<Signature<SIG_SIZE>, signature::Error> {
+impl<V: DilithiumVariant> signature::Signer<Signature<V>> for SecretKey<V> {
+    fn try_sign(&self, msg: &[u8]) -> Result<Signature<V>, signature::Error> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct PublicKey<const SIZE: usize> {
-    pub(crate) bytes: [u8; SIZE],
+pub struct PublicKey<V: DilithiumVariant> {
+    pub(crate) bytes: V::PublicKeyBytes,
 }
 
-impl<const SIZE: usize> AsRef<[u8]> for PublicKey<SIZE> {
+impl<V: DilithiumVariant> AsRef<[u8]> for PublicKey<V> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes.as_ref()
     }
 }
 
-impl<const PUBKEY_SIZE: usize, const SIG_SIZE: usize> signature::Verifier<Signature<SIG_SIZE>>
-    for PublicKey<PUBKEY_SIZE>
-{
-    fn verify(&self, msg: &[u8], signature: &Signature<SIG_SIZE>) -> Result<(), signature::Error> {
+impl<V: DilithiumVariant> signature::Verifier<Signature<V>> for PublicKey<V> {
+    fn verify(&self, msg: &[u8], signature: &Signature<V>) -> Result<(), signature::Error> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct Signature<const SIZE: usize> {
+pub struct Signature<V: DilithiumVariant> {
     // TODO: This should not be a bag of bytes; decode the signature when
     // Signature::from_bytes() is called.
-    bytes: [u8; SIZE],
+    pub(crate) bytes: V::SignatureBytes,
 }
 
-impl<const SIZE: usize> AsRef<[u8]> for Signature<SIZE> {
+impl<V: DilithiumVariant> AsRef<[u8]> for Signature<V> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes.as_ref()
     }
 }
 
-impl<const SIG_SIZE: usize> signature::Signature for Signature<SIG_SIZE> {
+impl<V: DilithiumVariant> signature::Signature for Signature<V> {
     #[inline]
     fn from_bytes(src: &[u8]) -> Result<Self, signature::Error> {
-        if src.len() == SIG_SIZE {
-            let mut bytes = [0; SIG_SIZE];
-            bytes.copy_from_slice(src);
+        if src.len() == V::SIG_SIZE {
+            let mut bytes = V::new_signature_bytes();
+            bytes.as_mut().copy_from_slice(src);
             Ok(Signature { bytes })
         } else {
             Err(Default::default())
@@ -103,7 +107,15 @@ impl DilithiumVariant for Dilithium3 {
     const PUBKEY_SIZE: usize = 1952;
     const SIG_SIZE: usize = 3293;
 
-    type SecretKey = SecretKey<{ Self::SECKEY_SIZE }>;
-    type PublicKey = PublicKey<{ Self::PUBKEY_SIZE }>;
-    type Signature = Signature<{ Self::SIG_SIZE }>;
+    type SecretKeyBytes = [u8; Self::SECKEY_SIZE];
+    type PublicKeyBytes = [u8; Self::PUBKEY_SIZE];
+    type SignatureBytes = [u8; Self::SIG_SIZE];
+
+    type SecretKey = SecretKey<Self>;
+    type PublicKey = PublicKey<Self>;
+    type Signature = Signature<Self>;
+
+    fn new_signature_bytes() -> Self::SignatureBytes {
+        [0; Self::SIG_SIZE]
+    }
 }

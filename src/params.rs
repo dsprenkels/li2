@@ -1,7 +1,10 @@
+use core::marker::PhantomData;
+
+use crate::variants::DilithiumVariant;
+
 pub(crate) const N: usize = 256;
 pub(crate) const SEEDBYTES: usize = 32;
 pub(crate) const CRHBYTES: usize = 64;
-
 
 pub trait DilithiumTypes {
     type Poly;
@@ -26,11 +29,9 @@ pub(crate) struct DilithiumImpl {
     pub(crate) k: u16,
     pub(crate) l: u16,
     pub(crate) max_attempts: u16,
-
     // Impl-dependent functions
     // expand_mask: fn(rho_prime: &[u8], kappa: u16) -> TY::Poly,
 }
-
 
 // const DILTIHIUM2: DilithiumImpl<GenericTypes> = DilithiumImpl {
 //     k: 4,
@@ -40,11 +41,10 @@ pub(crate) struct DilithiumImpl {
 //     expand_mask,
 // };
 
-pub(crate) const DILTIHIUM3: DilithiumImpl = DilithiumImpl {
+pub(crate) const DILITHIUM3: DilithiumImpl = DilithiumImpl {
     k: 6,
     l: 5,
     max_attempts: 406,
-
     // expand_mask,
 };
 
@@ -72,7 +72,7 @@ mod tests {
     fn test_dilithium3_params() {
         use refimpl::dilithium3::*;
 
-        assert_eq!(u32::from(DILTIHIUM3.k), K);
-        assert_eq!(u32::from(DILTIHIUM3.l), L);
+        assert_eq!(u32::from(DILITHIUM3.k), K);
+        assert_eq!(u32::from(DILITHIUM3.l), L);
     }
 }
