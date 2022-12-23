@@ -6,88 +6,17 @@ use crate::{
 use crystals_dilithium_sys as refimpl;
 use refimpl::dilithium3::*;
 
-pub fn dilithium3_keygen_from_seed_(
-    seed: &[u8],
-) -> Result<(SecretKey<Dilithium3>, PublicKey<Dilithium3>), crate::Error> {
-    if seed.len() != SEED_SIZE {
-        return Err(crate::Error::InternalError);
-    }
-
-    let mut sk = [0u8; Dilithium3::SECKEY_SIZE];
-    let mut pk = [0u8; Dilithium3::PUBKEY_SIZE];
-
-    unsafe {
-        let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
-        let mut tr = [0u8; SEEDBYTES];
-        let mut mat = <[polyvecl; DILITHIUM3.k as usize]>::default();
-        let mut s1 = polyvecl::default();
-        let mut s1hat = polyvecl::default();
-        let mut s2 = polyveck::default();
-        let mut t0 = polyveck::default();
-        let mut t1 = polyveck::default();
-
-        seedbuf[0..SEEDBYTES].copy_from_slice(seed);
-        pqcrystals_dilithium_fips202_ref_shake256(
-            &mut seedbuf as *mut u8,
-            seedbuf.len(),
-            &seedbuf as *const u8,
-            SEEDBYTES,
-        );
-
-        let (rho, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-        let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
-        let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-        debug_assert_eq!(seedbuf, &[]);
-
-        // Expand matrix
-        pqcrystals_dilithium3_ref_polyvec_matrix_expand(mat.as_mut_ptr(), rho.as_ptr());
-
-        // Sample short vectors s1 and s2
-        pqcrystals_dilithium3_ref_polyvecl_uniform_eta(&mut s1, rhoprime.as_ptr(), 0);
-        pqcrystals_dilithium3_ref_polyveck_uniform_eta(
-            &mut s2,
-            rhoprime.as_mut_ptr(),
-            DILITHIUM3.l,
-        );
-
-        // Matrix-vector multiplication
-        s1hat = s1;
-        pqcrystals_dilithium3_ref_polyvecl_ntt(&mut s1hat);
-        pqcrystals_dilithium3_ref_polyvec_matrix_pointwise_montgomery(
-            &mut t1,
-            mat.as_ptr(),
-            &s1hat,
-        );
-        pqcrystals_dilithium3_ref_polyveck_reduce(&mut t1);
-        pqcrystals_dilithium3_ref_polyveck_invntt_tomont(&mut t1);
-
-        // Add error vector s2
-        pqcrystals_dilithium3_ref_polyveck_add(&mut t1, &t1, &s2);
-
-        // Extract t1 and write public key
-        pqcrystals_dilithium3_ref_polyveck_caddq(&mut t1);
-        pqcrystals_dilithium3_ref_polyveck_power2round(&mut t1, &mut t0, &t1);
-        pqcrystals_dilithium3_ref_pack_pk(pk.as_mut_ptr(), rho.as_ptr(), &t1);
-
-        // Compute H(rho, t1) and write secret key
-        pqcrystals_dilithium_fips202_ref_shake256(
-            tr.as_mut_ptr(),
-            SEEDBYTES,
-            pk.as_mut_ptr(),
-            pk.len(),
-        );
-        pqcrystals_dilithium3_ref_pack_sk(
-            sk.as_mut_ptr(),
-            rho.as_ptr(),
-            tr.as_ptr(),
-            key.as_ptr(),
-            &t0,
-            &s1,
-            &s2,
-        );
-    }
-
-    Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
+struct KeygenMemoryPool<'a> {
+    sk: &'a mut [u8],
+    pk: &'a mut [u8],
+    seedbuf: &'a mut [u8; 2 * SEEDBYTES + CRHBYTES],
+    tr: &'a mut [u8; SEEDBYTES],
+    mat: &'a mut [poly],
+    s1: &'a mut [poly],
+    s1hat: &'a mut [poly],
+    s2: &'a mut [poly],
+    t0: &'a mut [poly],
+    t1: &'a mut [poly],
 }
 
 #[inline]
@@ -119,25 +48,11 @@ pub fn dilithium3_keygen_from_seed(
         t0: &mut t0,
         t1: &mut t1,
     };
-    dilithium_keygen_from_seed_impl(&DI, mem, seed)?;
+    dilithium_keygen_from_seed(&DI, mem, seed)?;
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
 }
 
-struct KeygenMemoryPool<'a> {
-    sk: &'a mut [u8],
-    pk: &'a mut [u8],
-    seedbuf: &'a mut [u8; 2 * SEEDBYTES + CRHBYTES],
-    tr: &'a mut [u8; SEEDBYTES],
-    mat: &'a mut [poly],
-    s1: &'a mut [poly],
-    s1hat: &'a mut [poly],
-    s2: &'a mut [poly],
-    t0: &'a mut [poly],
-    t1: &'a mut [poly],
-}
-
-#[inline(never)]
-fn dilithium_keygen_from_seed_impl(
+fn dilithium_keygen_from_seed(
     di: &'static DilithiumImpl,
     mem: KeygenMemoryPool<'_>,
     seed: &[u8],
@@ -210,6 +125,8 @@ fn dilithium_keygen_from_seed_impl(
 
 #[derive(Debug)]
 struct SignMemoryPool<'a> {
+    sigbytes: &'a mut [u8],
+    seedbuf: &'a mut [u8],
     mat: &'a mut [poly],
     s1: &'a mut [poly],
     y: &'a mut [poly],
@@ -228,22 +145,60 @@ pub fn dilithium3_signature(
     m: &[u8],
 ) -> Result<Signature<Dilithium3>, crate::Error> {
     let mut sigbytes = [0; Dilithium3::SIG_SIZE];
+    let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
+    let mut mat = <[poly; DILITHIUM3.k as usize * DILITHIUM3.l as usize]>::default();
+    let mut s1 = <[poly; DILITHIUM3.l as usize]>::default();
+    let mut y = <[poly; DILITHIUM3.l as usize]>::default();
+    let mut z = <[poly; DILITHIUM3.l as usize]>::default();
+    let mut t0 = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut s2 = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut w1 = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut w0 = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut h = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut cp = poly::default();
+    let mut state = keccak_state::default();
+
+    const DI: DilithiumImpl = DILITHIUM3;
+    let mem = SignMemoryPool {
+        sigbytes: &mut sigbytes[..],
+        seedbuf: &mut seedbuf[..],
+        mat: &mut mat[..],
+        s1: &mut s1[..],
+        y: &mut y[..],
+        z: &mut z[..],
+        t0: &mut t0[..],
+        s2: &mut s2[..],
+        w1: &mut w1[..],
+        w0: &mut w0[..],
+        h: &mut h[..],
+        cp: &mut cp,
+        state: &mut state,
+    };
+
+    dilithium_signature(&DI, mem, sk, m)?;
+    Ok(Signature { bytes: sigbytes })
+}
+
+fn dilithium_signature(
+    di: &'static DilithiumImpl,
+    mut mem: SignMemoryPool<'_>,
+    sk: &SecretKey<Dilithium3>,
+    m: &[u8],
+) -> Result<(), crate::Error> {
+    let mut nonce = 0u16;
 
     unsafe {
-        let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-        let mut nonce = 0u16;
-        let mut mat = <[polyvecl; DILITHIUM3.k as usize]>::default();
-        let mut s1 = polyvecl::default();
-        let mut y = polyvecl::default();
-        let mut z = polyvecl::default();
-        let mut t0 = polyveck::default();
-        let mut s2 = polyveck::default();
-        let mut w1 = polyveck::default();
-        let mut w0 = polyveck::default();
-        let mut h = polyveck::default();
-        let mut cp = poly::default();
-        let mut state = keccak_state::default();
+        let mat_ptr: *mut polyvecl = core::mem::transmute(mem.mat.as_mut_ptr());
+        let s1_ptr: *mut polyvecl = core::mem::transmute(mem.s1.as_mut_ptr());
+        let y_ptr: *mut polyvecl = core::mem::transmute(mem.y.as_mut_ptr());
+        let z_ptr: *mut polyvecl = core::mem::transmute(mem.z.as_mut_ptr());
+        let t0_ptr: *mut polyveck = core::mem::transmute(mem.t0.as_mut_ptr());
+        let s2_ptr: *mut polyveck = core::mem::transmute(mem.s2.as_mut_ptr());
+        let w1_ptr: *mut polyveck = core::mem::transmute(mem.w1.as_mut_ptr());
+        let w0_ptr: *mut polyveck = core::mem::transmute(mem.w0.as_mut_ptr());
+        let h_ptr: *mut polyveck = core::mem::transmute(mem.h.as_mut_ptr());
 
+        let seedbuf = &mut mem.seedbuf;
         let (rho, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
         let (tr, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
         let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
@@ -254,112 +209,113 @@ pub fn dilithium3_signature(
             rho.as_mut_ptr(),
             tr.as_mut_ptr(),
             key.as_mut_ptr(),
-            &mut t0,
-            &mut s1,
-            &mut s2,
+            t0_ptr,
+            s1_ptr,
+            s2_ptr,
             sk.bytes.as_ptr(),
         );
 
         // Compute mu := CRH(tr || msg)
-        pqcrystals_dilithium_fips202_ref_shake256_init(&mut state);
-        pqcrystals_dilithium_fips202_ref_shake256_absorb(&mut state, tr.as_ptr(), SEEDBYTES);
-        pqcrystals_dilithium_fips202_ref_shake256_absorb(&mut state, m.as_ptr(), m.len());
-        pqcrystals_dilithium_fips202_ref_shake256_finalize(&mut state);
-        pqcrystals_dilithium_fips202_ref_shake256_squeeze(mu.as_mut_ptr(), CRHBYTES, &mut state);
+        pqcrystals_dilithium_fips202_ref_shake256_init(mem.state);
+        pqcrystals_dilithium_fips202_ref_shake256_absorb(mem.state, tr.as_ptr(), SEEDBYTES);
+        pqcrystals_dilithium_fips202_ref_shake256_absorb(mem.state, m.as_ptr(), m.len());
+        pqcrystals_dilithium_fips202_ref_shake256_finalize(mem.state);
+        pqcrystals_dilithium_fips202_ref_shake256_squeeze(mu.as_mut_ptr(), CRHBYTES, mem.state);
 
         // Compute rhoprime := CRH(K || mu)
-        pqcrystals_dilithium_fips202_ref_shake256_init(&mut state);
-        pqcrystals_dilithium_fips202_ref_shake256_absorb(&mut state, key.as_ptr(), SEEDBYTES);
-        pqcrystals_dilithium_fips202_ref_shake256_absorb(&mut state, mu.as_ptr(), CRHBYTES);
-        pqcrystals_dilithium_fips202_ref_shake256_finalize(&mut state);
+        pqcrystals_dilithium_fips202_ref_shake256_init(mem.state);
+        pqcrystals_dilithium_fips202_ref_shake256_absorb(mem.state, key.as_ptr(), SEEDBYTES);
+        pqcrystals_dilithium_fips202_ref_shake256_absorb(mem.state, mu.as_ptr(), CRHBYTES);
+        pqcrystals_dilithium_fips202_ref_shake256_finalize(mem.state);
         pqcrystals_dilithium_fips202_ref_shake256_squeeze(
             rhoprime.as_mut_ptr(),
             CRHBYTES,
-            &mut state,
+            mem.state,
         );
 
         // Expand matrix and transform vectors
-        pqcrystals_dilithium3_ref_polyvec_matrix_expand(&mut mat as *mut _, rho.as_ptr());
-        pqcrystals_dilithium3_ref_polyvecl_ntt(&mut s1);
-        pqcrystals_dilithium3_ref_polyveck_ntt(&mut s2);
-        pqcrystals_dilithium3_ref_polyveck_ntt(&mut t0);
+        pqcrystals_dilithium3_ref_polyvec_matrix_expand(mat_ptr, rho.as_ptr());
+        pqcrystals_dilithium3_ref_polyvecl_ntt(s1_ptr);
+        pqcrystals_dilithium3_ref_polyveck_ntt(s2_ptr);
+        pqcrystals_dilithium3_ref_polyveck_ntt(t0_ptr);
 
         'rej: loop {
             // Sample intermediate vector y
-            pqcrystals_dilithium3_ref_polyvecl_uniform_gamma1(&mut y, rhoprime.as_ptr(), nonce);
+            pqcrystals_dilithium3_ref_polyvecl_uniform_gamma1(y_ptr, rhoprime.as_ptr(), nonce);
             nonce += 1;
 
             // Matrix-vector multiplication
-            z = y;
-            pqcrystals_dilithium3_ref_polyvecl_ntt(&mut z);
-            pqcrystals_dilithium3_ref_polyvec_matrix_pointwise_montgomery(
-                &mut w1,
-                &mat as *const _,
-                &z,
-            );
-            pqcrystals_dilithium3_ref_polyveck_reduce(&mut w1);
-            pqcrystals_dilithium3_ref_polyveck_invntt_tomont(&mut w1);
+            z_ptr.copy_from_nonoverlapping(y_ptr, 1);
+            pqcrystals_dilithium3_ref_polyvecl_ntt(z_ptr);
+            pqcrystals_dilithium3_ref_polyvec_matrix_pointwise_montgomery(w1_ptr, mat_ptr, z_ptr);
+            pqcrystals_dilithium3_ref_polyveck_reduce(w1_ptr);
+            pqcrystals_dilithium3_ref_polyveck_invntt_tomont(w1_ptr);
 
             // Decompose w and call the random oracle
-            pqcrystals_dilithium3_ref_polyveck_caddq(&mut w1);
-            pqcrystals_dilithium3_ref_polyveck_decompose(&mut w1, &mut w0, &w1);
-            pqcrystals_dilithium3_ref_polyveck_pack_w1(sigbytes.as_mut_ptr(), &w1);
+            pqcrystals_dilithium3_ref_polyveck_caddq(w1_ptr);
+            pqcrystals_dilithium3_ref_polyveck_decompose(w1_ptr, w0_ptr, w1_ptr);
+            pqcrystals_dilithium3_ref_polyveck_pack_w1(mem.sigbytes.as_mut_ptr(), w1_ptr);
 
             // Compute challenge
-            pqcrystals_dilithium_fips202_ref_shake256_init(&mut state);
-            pqcrystals_dilithium_fips202_ref_shake256_absorb(&mut state, mu.as_ptr(), CRHBYTES);
+            pqcrystals_dilithium_fips202_ref_shake256_init(mem.state);
+            pqcrystals_dilithium_fips202_ref_shake256_absorb(mem.state, mu.as_ptr(), CRHBYTES);
             pqcrystals_dilithium_fips202_ref_shake256_absorb(
-                &mut state,
-                sigbytes.as_ptr(),
+                mem.state,
+                mem.sigbytes.as_ptr(),
                 DILITHIUM3.k as usize * POLYW1_PACKEDBYTES as usize,
             );
-            pqcrystals_dilithium_fips202_ref_shake256_finalize(&mut state);
+            pqcrystals_dilithium_fips202_ref_shake256_finalize(mem.state);
             pqcrystals_dilithium_fips202_ref_shake256_squeeze(
-                sigbytes.as_mut_ptr(),
+                mem.sigbytes.as_mut_ptr(),
                 SEEDBYTES,
-                &mut state,
+                mem.state,
             );
-            pqcrystals_dilithium3_ref_poly_challenge(&mut cp, sigbytes.as_ptr());
-            pqcrystals_dilithium3_ref_poly_ntt(&mut cp);
+            pqcrystals_dilithium3_ref_poly_challenge(mem.cp, mem.sigbytes.as_ptr());
+            pqcrystals_dilithium3_ref_poly_ntt(mem.cp);
 
             // Compute z, reject if it reveals secret
-            pqcrystals_dilithium3_ref_polyvecl_pointwise_poly_montgomery(&mut z, &cp, &s1);
-            pqcrystals_dilithium3_ref_polyvecl_invntt_tomont(&mut z);
-            pqcrystals_dilithium3_ref_polyvecl_add(&mut z, &z, &y);
-            pqcrystals_dilithium3_ref_polyvecl_reduce(&mut z);
-            if 0 != pqcrystals_dilithium3_ref_polyvecl_chknorm(&z, (GAMMA1 - BETA) as i32) {
+            pqcrystals_dilithium3_ref_polyvecl_pointwise_poly_montgomery(z_ptr, mem.cp, s1_ptr);
+            pqcrystals_dilithium3_ref_polyvecl_invntt_tomont(z_ptr);
+            pqcrystals_dilithium3_ref_polyvecl_add(z_ptr, z_ptr, y_ptr);
+            pqcrystals_dilithium3_ref_polyvecl_reduce(z_ptr);
+            if 0 != pqcrystals_dilithium3_ref_polyvecl_chknorm(z_ptr, (GAMMA1 - BETA) as i32) {
                 continue 'rej;
             }
 
             // Check that subtracting cs2 does not change high bits of w and
             // low bits do not reveal secret information
-            pqcrystals_dilithium3_ref_polyveck_pointwise_poly_montgomery(&mut h, &cp, &s2);
-            pqcrystals_dilithium3_ref_polyveck_invntt_tomont(&mut h);
-            pqcrystals_dilithium3_ref_polyveck_sub(&mut w0, &w0, &h);
-            pqcrystals_dilithium3_ref_polyveck_reduce(&mut w0);
-            if 0 != pqcrystals_dilithium3_ref_polyveck_chknorm(&w0, (GAMMA2 - BETA) as i32) {
+            pqcrystals_dilithium3_ref_polyveck_pointwise_poly_montgomery(h_ptr, mem.cp, s2_ptr);
+            pqcrystals_dilithium3_ref_polyveck_invntt_tomont(h_ptr);
+            pqcrystals_dilithium3_ref_polyveck_sub(w0_ptr, w0_ptr, h_ptr);
+            pqcrystals_dilithium3_ref_polyveck_reduce(w0_ptr);
+            if 0 != pqcrystals_dilithium3_ref_polyveck_chknorm(w0_ptr, (GAMMA2 - BETA) as i32) {
                 continue 'rej;
             }
 
             // Compute hints for w1
-            pqcrystals_dilithium3_ref_polyveck_pointwise_poly_montgomery(&mut h, &cp, &t0);
-            pqcrystals_dilithium3_ref_polyveck_invntt_tomont(&mut h);
-            pqcrystals_dilithium3_ref_polyveck_reduce(&mut h);
-            if 0 != pqcrystals_dilithium3_ref_polyveck_chknorm(&h, GAMMA2 as i32) {
+            pqcrystals_dilithium3_ref_polyveck_pointwise_poly_montgomery(h_ptr, mem.cp, t0_ptr);
+            pqcrystals_dilithium3_ref_polyveck_invntt_tomont(h_ptr);
+            pqcrystals_dilithium3_ref_polyveck_reduce(h_ptr);
+            if 0 != pqcrystals_dilithium3_ref_polyveck_chknorm(h_ptr, GAMMA2 as i32) {
                 continue 'rej;
             }
-            pqcrystals_dilithium3_ref_polyveck_add(&mut w0, &w0, &h);
-            let n = pqcrystals_dilithium3_ref_polyveck_make_hint(&mut h, &w0, &w1);
+            pqcrystals_dilithium3_ref_polyveck_add(w0_ptr, w0_ptr, h_ptr);
+            let n = pqcrystals_dilithium3_ref_polyveck_make_hint(h_ptr, w0_ptr, w1_ptr);
             if n > OMEGA {
                 continue 'rej;
             }
 
             // Write signature
-            pqcrystals_dilithium3_ref_pack_sig(sigbytes.as_mut_ptr(), sigbytes.as_ptr(), &z, &h);
+            pqcrystals_dilithium3_ref_pack_sig(
+                mem.sigbytes.as_mut_ptr(),
+                mem.sigbytes.as_ptr(),
+                z_ptr,
+                h_ptr,
+            );
             break 'rej;
         }
     }
-    Ok(Signature { bytes: sigbytes })
+    Ok(())
 }
 
 pub fn dilithium3_verify(
@@ -453,12 +409,12 @@ pub fn dilithium3_verify(
 mod tests {
     #![deny(dead_code)]
 
-extern crate std;
+    extern crate std;
 
     use core::ptr::null_mut;
 
     use super::*;
-    use std::{prelude::*, dbg, println};
+    use std::{dbg, prelude::*, println};
 
     #[test]
     fn test_refimpl_kat() {
@@ -500,10 +456,23 @@ extern crate std;
                 ) {
                     panic!("KAT keypair failed");
                 }
-                if 0 != pqcrystals_dilithium3_ref_signature(sig_expected.as_mut_ptr(), siglen, msg.as_ptr(), mlen, sk_expected.as_ptr()) {
+                if 0 != pqcrystals_dilithium3_ref_signature(
+                    sig_expected.as_mut_ptr(),
+                    siglen,
+                    msg.as_ptr(),
+                    mlen,
+                    sk_expected.as_ptr(),
+                ) {
                     panic!("KAT signature failed");
                 }
-                let verify_exptected = 0 == pqcrystals_dilithium3_ref_verify(sig_expected.as_ptr(), *siglen, msg.as_ptr(), mlen, pk_expected.as_ptr());
+                let verify_exptected = 0
+                    == pqcrystals_dilithium3_ref_verify(
+                        sig_expected.as_ptr(),
+                        *siglen,
+                        msg.as_ptr(),
+                        mlen,
+                        pk_expected.as_ptr(),
+                    );
                 assert_eq!(*siglen, CRYPTO_BYTES as usize);
 
                 // Generate the actual values
