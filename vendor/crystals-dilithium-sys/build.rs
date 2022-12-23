@@ -47,8 +47,10 @@ fn main() {
         .shared_flag(true)
         .static_flag(true)
         .include("crystals-dilithium/ref")
-        .files(&["crystals-dilithium/ref/randombytes.c"])
-        .compile("randombytes");
+        .files(&["crystals-dilithium/ref/rng.c"])
+        .compile("rng");
+
+    println!("cargo:rustc-link-lib=crypto");
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
