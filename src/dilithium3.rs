@@ -1,6 +1,9 @@
+use crate::variants;
 use crate::{
-    params::{DilithiumImpl, CRHBYTES, DILITHIUM3, SEEDBYTES},
-    variants::{Dilithium3, DilithiumVariant, PublicKey, SecretKey, Signature, SEED_SIZE},
+    params::{DilithiumImpl, CRHBYTES, DILITHIUM2, DILITHIUM3, SEEDBYTES},
+    variants::{
+        Dilithium2, Dilithium3, DilithiumVariant, PublicKey, SecretKey, Signature, SEED_SIZE,
+    },
     Error,
 };
 use crystals_dilithium_sys as refimpl;
@@ -20,22 +23,61 @@ struct KeygenMemoryPool<'a> {
 }
 
 #[inline]
+pub fn dilithium2_keygen_from_seed(
+    seed: &[u8],
+) -> Result<
+    (
+        variants::SecretKey<Dilithium2>,
+        variants::PublicKey<Dilithium2>,
+    ),
+    crate::Error,
+> {
+    type V = variants::Dilithium2;
+    const DI: DilithiumImpl = DILITHIUM2;
+    let mut sk = [0u8; V::SECKEY_SIZE];
+    let mut pk = [0u8; V::PUBKEY_SIZE];
+    let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
+    let mut tr = [0u8; SEEDBYTES];
+    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut s1 = <[poly; DI.l as usize]>::default();
+    let mut s1hat = <[poly; DI.l as usize]>::default();
+    let mut s2 = <[poly; DI.k as usize]>::default();
+    let mut t0 = <[poly; DI.k as usize]>::default();
+    let mut t1 = <[poly; DI.k as usize]>::default();
+
+    let mem = KeygenMemoryPool {
+        sk: &mut sk,
+        pk: &mut pk,
+        seedbuf: &mut seedbuf,
+        tr: &mut tr,
+        mat: &mut mat,
+        s1: &mut s1,
+        s1hat: &mut s1hat,
+        s2: &mut s2,
+        t0: &mut t0,
+        t1: &mut t1,
+    };
+    dilithium_keygen_from_seed(&DI, mem, seed)?;
+    Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
+}
+
+#[inline]
 pub fn dilithium3_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(SecretKey<Dilithium3>, PublicKey<Dilithium3>), crate::Error> {
-    let mut sk = [0u8; Dilithium3::SECKEY_SIZE];
-    let mut pk = [0u8; Dilithium3::PUBKEY_SIZE];
+    type V = Dilithium3;
+    const DI: DilithiumImpl = DILITHIUM3;
+    let mut sk = [0u8; V::SECKEY_SIZE];
+    let mut pk = [0u8; V::PUBKEY_SIZE];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat = <[poly; DILITHIUM3.k as usize * DILITHIUM3.l as usize]>::default();
-    let mut s1 = <[poly; DILITHIUM3.l as usize]>::default();
-    let mut s1hat = <[poly; DILITHIUM3.l as usize]>::default();
-    let mut s2 = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut t = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut t0 = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut t1 = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut s1 = <[poly; DI.l as usize]>::default();
+    let mut s1hat = <[poly; DI.l as usize]>::default();
+    let mut s2 = <[poly; DI.k as usize]>::default();
+    let mut t0 = <[poly; DI.k as usize]>::default();
+    let mut t1 = <[poly; DI.k as usize]>::default();
 
-    const DI: DilithiumImpl = DILITHIUM3;
     let mem = KeygenMemoryPool {
         sk: &mut sk,
         pk: &mut pk,
@@ -140,25 +182,64 @@ struct SignMemoryPool<'a> {
     state: &'a mut keccak_state,
 }
 
+pub fn dilithium2_signature(
+    sk: &SecretKey<Dilithium2>,
+    m: &[u8],
+) -> Result<Signature<Dilithium2>, crate::Error> {
+    type V = Dilithium2;
+    const DI: DilithiumImpl = DILITHIUM2;
+    let mut sigbytes = [0; V::SIG_SIZE];
+    let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
+    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut s1 = <[poly; DI.l as usize]>::default();
+    let mut y = <[poly; DI.l as usize]>::default();
+    let mut z = <[poly; DI.l as usize]>::default();
+    let mut t0 = <[poly; DI.k as usize]>::default();
+    let mut s2 = <[poly; DI.k as usize]>::default();
+    let mut w1 = <[poly; DI.k as usize]>::default();
+    let mut w0 = <[poly; DI.k as usize]>::default();
+    let mut h = <[poly; DI.k as usize]>::default();
+    let mut cp = poly::default();
+    let mut state = keccak_state::default();
+
+    let mem = SignMemoryPool {
+        sigbytes: &mut sigbytes[..],
+        seedbuf: &mut seedbuf[..],
+        mat: &mut mat[..],
+        s1: &mut s1[..],
+        y: &mut y[..],
+        z: &mut z[..],
+        t0: &mut t0[..],
+        s2: &mut s2[..],
+        w1: &mut w1[..],
+        w0: &mut w0[..],
+        h: &mut h[..],
+        cp: &mut cp,
+        state: &mut state,
+    };
+    dilithium_signature(&DI, mem, &sk.bytes, m)?;
+    Ok(Signature { bytes: sigbytes })
+}
+
 pub fn dilithium3_signature(
     sk: &SecretKey<Dilithium3>,
     m: &[u8],
 ) -> Result<Signature<Dilithium3>, crate::Error> {
+    const DI: DilithiumImpl = DILITHIUM3;
     let mut sigbytes = [0; Dilithium3::SIG_SIZE];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-    let mut mat = <[poly; DILITHIUM3.k as usize * DILITHIUM3.l as usize]>::default();
-    let mut s1 = <[poly; DILITHIUM3.l as usize]>::default();
-    let mut y = <[poly; DILITHIUM3.l as usize]>::default();
-    let mut z = <[poly; DILITHIUM3.l as usize]>::default();
-    let mut t0 = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut s2 = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut w1 = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut w0 = <[poly; DILITHIUM3.k as usize]>::default();
-    let mut h = <[poly; DILITHIUM3.k as usize]>::default();
+    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut s1 = <[poly; DI.l as usize]>::default();
+    let mut y = <[poly; DI.l as usize]>::default();
+    let mut z = <[poly; DI.l as usize]>::default();
+    let mut t0 = <[poly; DI.k as usize]>::default();
+    let mut s2 = <[poly; DI.k as usize]>::default();
+    let mut w1 = <[poly; DI.k as usize]>::default();
+    let mut w0 = <[poly; DI.k as usize]>::default();
+    let mut h = <[poly; DI.k as usize]>::default();
     let mut cp = poly::default();
     let mut state = keccak_state::default();
 
-    const DI: DilithiumImpl = DILITHIUM3;
     let mem = SignMemoryPool {
         sigbytes: &mut sigbytes[..],
         seedbuf: &mut seedbuf[..],
@@ -175,14 +256,14 @@ pub fn dilithium3_signature(
         state: &mut state,
     };
 
-    dilithium_signature(&DI, mem, sk, m)?;
+    dilithium_signature(&DI, mem, &sk.bytes, m)?;
     Ok(Signature { bytes: sigbytes })
 }
 
 fn dilithium_signature(
     di: &'static DilithiumImpl,
     mut mem: SignMemoryPool<'_>,
-    sk: &SecretKey<Dilithium3>,
+    sk: &[u8],
     m: &[u8],
 ) -> Result<(), crate::Error> {
     let mut nonce = 0u16;
@@ -212,7 +293,7 @@ fn dilithium_signature(
             t0_ptr,
             s1_ptr,
             s2_ptr,
-            sk.bytes.as_ptr(),
+            sk.as_ptr(),
         );
 
         // Compute mu := CRH(tr || msg)
@@ -262,7 +343,7 @@ fn dilithium_signature(
             pqcrystals_dilithium_fips202_ref_shake256_absorb(
                 mem.state,
                 mem.sigbytes.as_ptr(),
-                DILITHIUM3.k as usize * POLYW1_PACKEDBYTES as usize,
+                di.k as usize * POLYW1_PACKEDBYTES as usize,
             );
             pqcrystals_dilithium_fips202_ref_shake256_finalize(mem.state);
             pqcrystals_dilithium_fips202_ref_shake256_squeeze(
@@ -412,84 +493,131 @@ mod tests {
     extern crate std;
 
     use core::ptr::null_mut;
+    use std::{sync::Mutex, vec};
+
+    use once_cell::sync::Lazy;
 
     use super::*;
-    use std::{dbg, prelude::*, println};
 
-    #[test]
-    fn test_refimpl_kat() {
-        let mut seeds = [[0; 48]; 100];
-        let mut msgs = [[0; 3300]; 100];
+    // Unfortunately the deterministic KAT rng state is global.
+    static KAT_RNG_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::default());
 
-        let mut entropy_input = [0; 48];
-        for (idx, b) in entropy_input.iter_mut().enumerate() {
-            *b = idx as u8;
-        }
+    macro_rules! test_refimpl_kat {
+        ( $name:ident, $variant:ty, $p:expr, $ref_keypair:expr, $ref_signature:expr, $ref_verify:expr, $actual_keygen:expr, $actual_signature:expr, $actual_verify:expr ) => {
+            #[test]
+            fn $name() {
+                type V = $variant;
+                let rng_guard = KAT_RNG_MUTEX.lock();
 
-        // Simulate generating the request KAT file
-        unsafe {
-            randombytes_init(entropy_input.as_mut_ptr(), null_mut(), 256);
-        }
-        for (idx, seed) in seeds.iter_mut().enumerate() {
-            let mlen = 33 * (idx + 1);
-            unsafe {
-                randombytes(seed.as_mut_ptr(), seed.len() as u64);
-                randombytes(msgs[idx].as_mut_ptr(), mlen as u64);
-            }
-        }
+                let mut seeds = [[0; 48]; 100];
+                let mut msgs = [[0; 3300]; 100];
 
-        // Simulate generating the response KAT file and verify
-        for (idx, seed) in seeds.iter_mut().enumerate() {
-            unsafe {
-                let mlen = 33 * (idx + 1);
-                let msg = &msgs[idx][0..mlen];
-                let mut sk_expected = [0; CRYPTO_SECRETKEYBYTES as usize];
-                let mut pk_expected = [0; CRYPTO_PUBLICKEYBYTES as usize];
-                let mut sig_expected = [0; CRYPTO_BYTES as usize];
-                let ref mut siglen = 0;
-
-                // Generate the expected values
-                randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
-                if 0 != pqcrystals_dilithium3_ref_keypair(
-                    pk_expected.as_mut_ptr(),
-                    sk_expected.as_mut_ptr(),
-                ) {
-                    panic!("KAT keypair failed");
+                let mut entropy_input = [0; 48];
+                for (idx, b) in entropy_input.iter_mut().enumerate() {
+                    *b = idx as u8;
                 }
-                if 0 != pqcrystals_dilithium3_ref_signature(
-                    sig_expected.as_mut_ptr(),
-                    siglen,
-                    msg.as_ptr(),
-                    mlen,
-                    sk_expected.as_ptr(),
-                ) {
-                    panic!("KAT signature failed");
+
+                // Simulate generating the request KAT file
+                unsafe {
+                    randombytes_init(entropy_input.as_mut_ptr(), null_mut(), 256);
                 }
-                let verify_exptected = 0
-                    == pqcrystals_dilithium3_ref_verify(
-                        sig_expected.as_ptr(),
-                        *siglen,
-                        msg.as_ptr(),
-                        mlen,
-                        pk_expected.as_ptr(),
-                    );
-                assert_eq!(*siglen, CRYPTO_BYTES as usize);
+                for (idx, seed) in seeds.iter_mut().enumerate() {
+                    let mlen = 33 * (idx + 1);
+                    unsafe {
+                        randombytes(seed.as_mut_ptr(), seed.len() as u64);
+                        randombytes(msgs[idx].as_mut_ptr(), mlen as u64);
+                    }
+                }
 
-                // Generate the actual values
-                randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
-                let mut keygen_seed = [0; SEEDBYTES];
-                randombytes(keygen_seed.as_mut_ptr(), SEEDBYTES as u64);
-                let (sk_actual, pk_actual) = dilithium3_keygen_from_seed(&keygen_seed).unwrap();
-                let sig_actual = dilithium3_signature(&sk_actual, msg).unwrap();
-                let verify_actual = dilithium3_verify(&pk_actual, msg, &sig_actual);
+                // Simulate generating the response KAT file and verify
+                for (idx, seed) in seeds.iter_mut().enumerate() {
+                    unsafe {
+                        let mlen = 33 * (idx + 1);
+                        let msg = &msgs[idx][0..mlen];
+                        let mut sk_expected = vec![0; V::SECKEY_SIZE];
+                        let mut pk_expected = vec![0; V::PUBKEY_SIZE];
+                        let mut sig_expected = vec![0; V::SIG_SIZE];
+                        let ref mut siglen = 0;
 
-                assert_eq!(sk_actual.bytes, sk_expected);
-                assert_eq!(pk_actual.bytes, pk_expected);
-                assert_eq!(sig_actual.bytes, sig_expected);
-                assert_eq!(verify_actual.is_ok(), verify_exptected);
+                        // Generate the expected values
+                        randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
+                        if 0 != $ref_keypair(pk_expected.as_mut_ptr(), sk_expected.as_mut_ptr())
+                        {
+                            panic!("KAT keypair failed");
+                        }
+                        if 0 != $ref_signature(
+                            sig_expected.as_mut_ptr(),
+                            siglen,
+                            msg.as_ptr(),
+                            mlen,
+                            sk_expected.as_ptr(),
+                        ) {
+                            panic!("KAT signature failed");
+                        }
+                        let verify_exptected = 0
+                            == $ref_verify(
+                                sig_expected.as_ptr(),
+                                *siglen,
+                                msg.as_ptr(),
+                                mlen,
+                                pk_expected.as_ptr(),
+                            );
+                        assert_eq!(*siglen, V::SIG_SIZE as usize);
+
+                        // Generate the actual values
+                        randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
+                        let mut keygen_seed = [0; SEEDBYTES];
+                        randombytes(keygen_seed.as_mut_ptr(), SEEDBYTES as u64);
+                        let (sk_actual, pk_actual) = $actual_keygen(&keygen_seed).unwrap();
+                        let sig_actual = $actual_signature(&sk_actual, msg).unwrap();
+                        // let verify_actual = $actial_verify(&pk_actual, msg, &sig_actual);
+
+                        assert_eq!(sk_actual.bytes, &sk_expected[..]);
+                        assert_eq!(pk_actual.bytes, &pk_expected[..]);
+                        assert_eq!(sig_actual.bytes, &sig_expected[..]);
+                        // assert_eq!(verify_actual.is_ok(), verify_exptected);
+                    }
+                }
+                drop(rng_guard);
             }
-        }
+        };
     }
+
+    // TODO: LEFT HERE
+    //
+    // At this point, the functions earlier in this file all use the extern
+    // functions from the reference implementation for Dilithium3.  When you
+    // run that for Dilithium2 buffer sizes, it will obviously crash with a
+    // segfault, because the functions are not compatible.
+    //
+    // At this point, we must start populating the DilithiumImpl structs with
+    // all of the variant-specific functions and get all of the different
+    // variants running.  Don't immediately start looking at which functions
+    // are independent of variant; just put all of them in there, and we'll
+    // dedup them later when we reimplement them in Rust.
+
+    // test_refimpl_kat!(
+    //     test_refimpl_dilithium2_kat,
+    //     Dilithium2,
+    //     DILITHIUM2,
+    //     pqcrystals_dilithium2_ref_keypair,
+    //     pqcrystals_dilithium2_ref_signature,
+    //     pqcrystals_dilithium2_ref_verify,
+    //     dilithium2_keygen_from_seed,
+    //     dilithium2_signature,
+    //     dilithium2_verify
+    // );
+    test_refimpl_kat!(
+        test_refimpl_dilithium3_kat,
+        Dilithium3,
+        DILITHIUM3,
+        pqcrystals_dilithium3_ref_keypair,
+        pqcrystals_dilithium3_ref_signature,
+        pqcrystals_dilithium3_ref_verify,
+        dilithium3_keygen_from_seed,
+        dilithium3_signature,
+        dilithium3_verify
+    );
 
     #[test]
     fn test_keygen_from_seed() {

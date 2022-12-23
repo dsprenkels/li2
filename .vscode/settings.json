@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.jazz": "jasmin",
+        "*.jinc": "jasmin",
+        "config.h": "c"
+    }
+}

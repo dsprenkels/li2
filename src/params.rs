@@ -33,13 +33,12 @@ pub(crate) struct DilithiumImpl {
     // expand_mask: fn(rho_prime: &[u8], kappa: u16) -> TY::Poly,
 }
 
-// const DILTIHIUM2: DilithiumImpl<GenericTypes> = DilithiumImpl {
-//     k: 4,
-//     l: 4,
-//     max_attempts: 331,
-
-//     expand_mask,
-// };
+pub(crate) const DILITHIUM2: DilithiumImpl = DilithiumImpl {
+    k: 4,
+    l: 4,
+    max_attempts: 331,
+    // expand_mask,
+};
 
 pub(crate) const DILITHIUM3: DilithiumImpl = DilithiumImpl {
     k: 6,
@@ -66,6 +65,14 @@ mod tests {
     #[ignore = "still rapidly developing impl"]
     fn test_vtable_size() {
         assert_eq!(core::mem::size_of::<DilithiumImpl>(), 0);
+    }
+
+    #[test]
+    fn test_dilithium2_params() {
+        use refimpl::dilithium2::*;
+
+        assert_eq!(u32::from(DILITHIUM2.k), K);
+        assert_eq!(u32::from(DILITHIUM2.l), L);
     }
 
     #[test]

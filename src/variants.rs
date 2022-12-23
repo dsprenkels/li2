@@ -37,6 +37,7 @@ pub trait DilithiumVariant: core::fmt::Debug {
     fn new_signature_bytes() -> Self::SignatureBytes;
 }
 
+// TODO: Move this declaration to lib.rs
 pub struct SecretKey<V: DilithiumVariant> {
     pub(crate) bytes: V::SecretKeyBytes,
 }
@@ -54,6 +55,7 @@ impl<V: DilithiumVariant> signature::Signer<Signature<V>> for SecretKey<V> {
     }
 }
 
+// TODO: Move this declaration to lib.rs
 #[derive(Debug)]
 pub struct PublicKey<V: DilithiumVariant> {
     pub(crate) bytes: V::PublicKeyBytes,
@@ -72,6 +74,7 @@ impl<V: DilithiumVariant> signature::Verifier<Signature<V>> for PublicKey<V> {
     }
 }
 
+// TODO: Move this declaration to lib.rs
 #[derive(Debug)]
 pub struct Signature<V: DilithiumVariant> {
     // TODO: This should not be a bag of bytes; decode the signature when
@@ -100,7 +103,27 @@ impl<V: DilithiumVariant> signature::Signature for Signature<V> {
 }
 
 #[derive(Debug)]
+pub struct Dilithium2;
+#[derive(Debug)]
 pub struct Dilithium3;
+
+impl DilithiumVariant for Dilithium2 {
+    const SECKEY_SIZE: usize = 2528;
+    const PUBKEY_SIZE: usize = 1312;
+    const SIG_SIZE: usize = 2420;
+
+    type SecretKeyBytes = [u8; Self::SECKEY_SIZE];
+    type PublicKeyBytes = [u8; Self::PUBKEY_SIZE];
+    type SignatureBytes = [u8; Self::SIG_SIZE];
+
+    type SecretKey = SecretKey<Self>;
+    type PublicKey = PublicKey<Self>;
+    type Signature = Signature<Self>;
+
+    fn new_signature_bytes() -> Self::SignatureBytes {
+        [0; Self::SIG_SIZE]
+    }
+}
 
 impl DilithiumVariant for Dilithium3 {
     const SECKEY_SIZE: usize = 4000;
