@@ -106,6 +106,8 @@ impl<V: DilithiumVariant> signature::Signature for Signature<V> {
 pub struct Dilithium2;
 #[derive(Debug)]
 pub struct Dilithium3;
+#[derive(Debug)]
+pub struct Dilithium5;
 
 impl DilithiumVariant for Dilithium2 {
     const SECKEY_SIZE: usize = 2528;
@@ -129,6 +131,24 @@ impl DilithiumVariant for Dilithium3 {
     const SECKEY_SIZE: usize = 4000;
     const PUBKEY_SIZE: usize = 1952;
     const SIG_SIZE: usize = 3293;
+
+    type SecretKeyBytes = [u8; Self::SECKEY_SIZE];
+    type PublicKeyBytes = [u8; Self::PUBKEY_SIZE];
+    type SignatureBytes = [u8; Self::SIG_SIZE];
+
+    type SecretKey = SecretKey<Self>;
+    type PublicKey = PublicKey<Self>;
+    type Signature = Signature<Self>;
+
+    fn new_signature_bytes() -> Self::SignatureBytes {
+        [0; Self::SIG_SIZE]
+    }
+}
+
+impl DilithiumVariant for Dilithium5 {
+    const SECKEY_SIZE: usize = 4864;
+    const PUBKEY_SIZE: usize = 2592;
+    const SIG_SIZE: usize = 4595;
 
     type SecretKeyBytes = [u8; Self::SECKEY_SIZE];
     type PublicKeyBytes = [u8; Self::PUBKEY_SIZE];

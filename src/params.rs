@@ -453,14 +453,168 @@ pub(crate) const DILITHIUM3: DilithiumImpl = DilithiumImpl {
     },
 };
 
-// const DILITHIUM5: DilithiumImpl<GenericTypes> = DilithiumImpl {
-//     k: 8,
-//     l: 7,
 
-//     max_attempts: 295,
+#[allow(non_snake_case)]
+pub(crate) const DILITHIUM5: DilithiumImpl = DilithiumImpl {
+    k: 8,
+    l: 7,
+    max_attempts: 295,
+    
+    K: dilithium5::K,
+    L: dilithium5::L,
+    ETA: dilithium5::ETA,
+    TAU: dilithium5::TAU,
+    BETA: dilithium5::BETA,
+    GAMMA1: dilithium5::GAMMA1,
+    GAMMA2: dilithium5::GAMMA2,
+    OMEGA: dilithium5::OMEGA,
+    POLYT1_PACKEDBYTES: dilithium5::POLYT1_PACKEDBYTES,
+    POLYT0_PACKEDBYTES: dilithium5::POLYT0_PACKEDBYTES,
+    POLYVECH_PACKEDBYTES: dilithium5::POLYVECH_PACKEDBYTES,
+    POLYZ_PACKEDBYTES: dilithium5::POLYZ_PACKEDBYTES,
+    POLYW1_PACKEDBYTES: dilithium5::POLYW1_PACKEDBYTES,
+    POLYETA_PACKEDBYTES: dilithium5::POLYETA_PACKEDBYTES,
+    CRYPTO_PUBLICKEYBYTES: dilithium5::CRYPTO_PUBLICKEYBYTES,
+    CRYPTO_SECRETKEYBYTES: dilithium5::CRYPTO_SECRETKEYBYTES,
+    CRYPTO_BYTES: dilithium5::CRYPTO_BYTES,
 
-//     expand_mask
-// };
+    shake256_init: dilithium3::pqcrystals_dilithium_fips202_ref_shake256_init,
+    shake256_absorb: dilithium3::pqcrystals_dilithium_fips202_ref_shake256_absorb,
+    shake256_finalize: dilithium3::pqcrystals_dilithium_fips202_ref_shake256_finalize,
+    shake256_squeeze: dilithium3::pqcrystals_dilithium_fips202_ref_shake256_squeeze,
+    polyvec_matrix_expand: |mat, rho| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvec_matrix_expand(transmute(mat), rho)
+    },
+
+    polyvecl_uniform_eta: |v, seed, nonce| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_uniform_eta(transmute(v), seed, nonce)
+    },
+    polyveck_uniform_eta: |v, seed, nonce| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_uniform_eta(transmute(v), seed, nonce)
+    },
+    polyvecl_ntt: |v| unsafe { dilithium5::pqcrystals_dilithium5_ref_polyvecl_ntt(transmute(v)) },
+    poly_ntt: |v| unsafe { dilithium5::pqcrystals_dilithium5_ref_poly_ntt(transmute(v)) },
+    polyveck_ntt: |v| unsafe { dilithium5::pqcrystals_dilithium5_ref_polyveck_ntt(transmute(v)) },
+    polyvec_matrix_pointwise_montgomery: |t, mat, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvec_matrix_pointwise_montgomery(
+            transmute(t),
+            transmute(mat),
+            transmute(v),
+        )
+    },
+    polyveck_reduce: |v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_reduce(transmute(v))
+    },
+    polyveck_invntt_tomont: |v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_invntt_tomont(transmute(v))
+    },
+    polyveck_add: |w, u, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_add(transmute(w), transmute(u), transmute(v))
+    },
+    polyveck_caddq: |v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_caddq(transmute(v))
+    },
+    polyveck_power2round: |v1, v0, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_power2round(
+            transmute(v1),
+            transmute(v0),
+            transmute(v),
+        )
+    },
+
+    polyveck_decompose: |v1, v0, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_decompose(
+            transmute(v1),
+            transmute(v0),
+            transmute(v),
+        )
+    },
+    polyveck_pack_w1: |r, w1| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_pack_w1(r, transmute(w1))
+    },
+    poly_challenge: |c, seed| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_poly_challenge(transmute(c), seed)
+    },
+    polyvecl_pointwise_poly_montgomery: |r, a, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_pointwise_poly_montgomery(
+            transmute(r),
+            transmute(a),
+            transmute(v),
+        )
+    },
+    polyvecl_invntt_tomont: |v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_invntt_tomont(transmute(v))
+    },
+    polyvecl_add: |w, u, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_add(transmute(w), transmute(u), transmute(v))
+    },
+    polyvecl_reduce: |v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_reduce(transmute(v))
+    },
+    polyvecl_chknorm: |v, B| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_chknorm(transmute(v), B)
+    },
+    polyveck_chknorm: |v, B| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_chknorm(transmute(v), B)
+    },
+    polyveck_pointwise_poly_montgomery: |r, a, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_pointwise_poly_montgomery(
+            transmute(r),
+            transmute(a),
+            transmute(v),
+        )
+    },
+    polyveck_sub: |w, u, v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_sub(transmute(w), transmute(u), transmute(v))
+    },
+    polyveck_make_hint: |h, v0, v1| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_make_hint(
+            transmute(h),
+            transmute(v0),
+            transmute(v1),
+        )
+    },
+    pack_sig: |sig, c, z, h| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_pack_sig(
+            sig,
+            transmute(c),
+            transmute(z),
+            transmute(h),
+        )
+    },
+    unpack_sk: |rho, tr, key, t0, s1, s2, sk| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_unpack_sk(rho, tr, key, transmute(t0), transmute(s1), transmute(s2), sk)
+    },
+    pack_pk: |pk, rho, t1| unsafe { dilithium5::pqcrystals_dilithium5_ref_pack_pk(pk, rho, transmute(t1)) },
+    pack_sk: |sk, rho, tr, key, t0, s1, s2| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_pack_sk(sk, rho, tr, key, transmute(t0), transmute(s1), transmute(s2))
+    },
+    polyvecl_uniform_gamma1: |v, seed, nonce| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyvecl_uniform_gamma1(transmute(v), seed, nonce)
+    },
+    unpack_pk: |rho, t1, pk| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_unpack_pk(rho, transmute(t1), pk)
+    },
+
+    polyveck_shiftl: |v| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_shiftl(transmute(v))
+    },
+    polyveck_use_hint: |w, v, h| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_polyveck_use_hint(
+            transmute(w),
+            transmute(v),
+            transmute(h),
+        )
+    },
+    unpack_sig: |c, z, h, sig| unsafe {
+        dilithium5::pqcrystals_dilithium5_ref_unpack_sig(
+            transmute(c),
+            transmute(z),
+            transmute(h),
+            sig,
+        )
+    },
+};
 
 #[cfg(test)]
 mod tests {

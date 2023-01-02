@@ -1,8 +1,9 @@
 use crate::variants;
 use crate::{
-    params::{DilithiumImpl, CRHBYTES, DILITHIUM2, DILITHIUM3, SEEDBYTES},
+    params::{DilithiumImpl, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
     variants::{
-        Dilithium2, Dilithium3, DilithiumVariant, PublicKey, SecretKey, Signature, SEED_SIZE,
+        Dilithium2, Dilithium3, Dilithium5, DilithiumVariant, PublicKey, SecretKey, Signature,
+        SEED_SIZE,
     },
     Error,
 };
@@ -38,7 +39,8 @@ pub fn dilithium2_keygen_from_seed(
     let mut pk = [0u8; V::PUBKEY_SIZE];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut mat: [poly; DI.k as usize * DI.l as usize] = unsafe { core::mem::zeroed() };
+
     let mut s1 = <[poly; DI.l as usize]>::default();
     let mut s1hat = <[poly; DI.l as usize]>::default();
     let mut s2 = <[poly; DI.k as usize]>::default();
@@ -61,7 +63,6 @@ pub fn dilithium2_keygen_from_seed(
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
 }
 
-#[inline]
 pub fn dilithium3_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(SecretKey<Dilithium3>, PublicKey<Dilithium3>), crate::Error> {
@@ -71,7 +72,40 @@ pub fn dilithium3_keygen_from_seed(
     let mut pk = [0u8; V::PUBKEY_SIZE];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut mat: [poly; DI.k as usize * DI.l as usize] = unsafe { core::mem::zeroed() };
+
+    let mut s1 = <[poly; DI.l as usize]>::default();
+    let mut s1hat = <[poly; DI.l as usize]>::default();
+    let mut s2 = <[poly; DI.k as usize]>::default();
+    let mut t0 = <[poly; DI.k as usize]>::default();
+    let mut t1 = <[poly; DI.k as usize]>::default();
+
+    let mem = KeygenMemoryPool {
+        sk: &mut sk,
+        pk: &mut pk,
+        seedbuf: &mut seedbuf,
+        tr: &mut tr,
+        mat: &mut mat,
+        s1: &mut s1,
+        s1hat: &mut s1hat,
+        s2: &mut s2,
+        t0: &mut t0,
+        t1: &mut t1,
+    };
+    dilithium_keygen_from_seed(&DI, mem, seed)?;
+    Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
+}
+
+pub fn dilithium5_keygen_from_seed(
+    seed: &[u8],
+) -> Result<(SecretKey<Dilithium5>, PublicKey<Dilithium5>), crate::Error> {
+    type V = Dilithium5;
+    const DI: DilithiumImpl = DILITHIUM5;
+    let mut sk = [0u8; V::SECKEY_SIZE];
+    let mut pk = [0u8; V::PUBKEY_SIZE];
+    let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
+    let mut tr = [0u8; SEEDBYTES];
+    let mut mat: [poly; DI.k as usize * DI.l as usize] = unsafe { core::mem::zeroed() };
     let mut s1 = <[poly; DI.l as usize]>::default();
     let mut s1hat = <[poly; DI.l as usize]>::default();
     let mut s2 = <[poly; DI.k as usize]>::default();
@@ -98,7 +132,7 @@ fn dilithium_keygen_from_seed(
     di: &'static DilithiumImpl,
     mem: KeygenMemoryPool<'_>,
     seed: &[u8],
-) -> Result<(), crate::Error> {
+) -> Result<(), Error> {
     debug_assert_eq!(seed.len(), SEEDBYTES);
 
     unsafe {
@@ -125,13 +159,12 @@ fn dilithium_keygen_from_seed(
         (di.polyvec_matrix_expand)(mat_ptr, rho.as_ptr());
 
         // Sample short vectors s1 and s2
-        // TODO: Uniform sampling must be specified for variants!
         (di.polyvecl_uniform_eta)(s1_ptr, rhoprime.as_ptr(), 0);
         (di.polyveck_uniform_eta)(s2_ptr, rhoprime.as_mut_ptr(), di.l);
 
         // Matrix-vector multiplication
         for idx in 0..di.L as usize {
-            (*s1hat_ptr).vec[idx] = mem.s1[idx];
+            *(*s1hat_ptr).vec.get_unchecked_mut(idx) = mem.s1[idx];
         }
 
         (di.polyvecl_ntt)(s1hat_ptr);
@@ -185,12 +218,12 @@ struct SignMemoryPool<'a> {
 pub fn dilithium2_signature(
     sk: &SecretKey<Dilithium2>,
     m: &[u8],
-) -> Result<Signature<Dilithium2>, crate::Error> {
+) -> Result<Signature<Dilithium2>, Error> {
     type V = Dilithium2;
     const DI: DilithiumImpl = DILITHIUM2;
     let mut sigbytes = [0; V::SIG_SIZE];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut mat: [poly; DI.k as usize * DI.l as usize] = unsafe { core::mem::zeroed() };
     let mut s1 = <[poly; DI.l as usize]>::default();
     let mut y = <[poly; DI.l as usize]>::default();
     let mut z = <[poly; DI.l as usize]>::default();
@@ -228,7 +261,47 @@ pub fn dilithium3_signature(
     const DI: DilithiumImpl = DILITHIUM3;
     let mut sigbytes = [0; Dilithium3::SIG_SIZE];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-    let mut mat = <[poly; DI.k as usize * DI.l as usize]>::default();
+    let mut mat: [poly; DI.k as usize * DI.l as usize] = unsafe { core::mem::zeroed() };
+
+    let mut s1 = <[poly; DI.l as usize]>::default();
+    let mut y = <[poly; DI.l as usize]>::default();
+    let mut z = <[poly; DI.l as usize]>::default();
+    let mut t0 = <[poly; DI.k as usize]>::default();
+    let mut s2 = <[poly; DI.k as usize]>::default();
+    let mut w1 = <[poly; DI.k as usize]>::default();
+    let mut w0 = <[poly; DI.k as usize]>::default();
+    let mut h = <[poly; DI.k as usize]>::default();
+    let mut cp = poly::default();
+    let mut state = keccak_state::default();
+
+    let mem = SignMemoryPool {
+        sigbytes: &mut sigbytes[..],
+        seedbuf: &mut seedbuf[..],
+        mat: &mut mat[..],
+        s1: &mut s1[..],
+        y: &mut y[..],
+        z: &mut z[..],
+        t0: &mut t0[..],
+        s2: &mut s2[..],
+        w1: &mut w1[..],
+        w0: &mut w0[..],
+        h: &mut h[..],
+        cp: &mut cp,
+        state: &mut state,
+    };
+
+    dilithium_signature(&DI, mem, &sk.bytes, m)?;
+    Ok(Signature { bytes: sigbytes })
+}
+
+pub fn dilithium5_signature(
+    sk: &SecretKey<Dilithium5>,
+    m: &[u8],
+) -> Result<Signature<Dilithium5>, Error> {
+    const DI: DilithiumImpl = DILITHIUM5;
+    let mut sigbytes = [0; Dilithium5::SIG_SIZE];
+    let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
+    let mut mat: [poly; DI.k as usize * DI.l as usize] = unsafe { core::mem::zeroed() };
     let mut s1 = <[poly; DI.l as usize]>::default();
     let mut y = <[poly; DI.l as usize]>::default();
     let mut z = <[poly; DI.l as usize]>::default();
@@ -329,7 +402,7 @@ fn dilithium_signature(
 
             // Matrix-vector multiplication
             for idx in 0..di.L as usize {
-                (*z_ptr).vec[idx] = mem.y[idx];
+                *(*z_ptr).vec.get_unchecked_mut(idx) = mem.y[idx];
             }
             (di.polyvecl_ntt)(z_ptr);
             (di.polyvec_matrix_pointwise_montgomery)(w1_ptr, mat_ptr, z_ptr);
@@ -428,7 +501,7 @@ pub fn dilithium2_verify(
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
     let mut cp = poly::default();
-    let mut mat = <[poly; (di.K * di.L) as usize]>::default();
+    let mut mat: [poly; di.k as usize * di.l as usize] = unsafe { core::mem::zeroed() };
     let mut z = <[poly; di.L as usize]>::default();
     let mut t1 = <[poly; di.K as usize]>::default();
     let mut w1 = <[poly; di.K as usize]>::default();
@@ -466,7 +539,45 @@ pub fn dilithium3_verify(
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
     let mut cp = poly::default();
-    let mut mat = <[poly; (di.K * di.L) as usize]>::default();
+    let mut mat: [poly; di.k as usize * di.l as usize] = unsafe { core::mem::zeroed() };
+    let mut z = <[poly; di.L as usize]>::default();
+    let mut t1 = <[poly; di.K as usize]>::default();
+    let mut w1 = <[poly; di.K as usize]>::default();
+    let mut h = <[poly; di.K as usize]>::default();
+    let mut state = keccak_state::default();
+
+    let mem = VerifyMemoryPool {
+        buf: &mut buf,
+        rho: &mut rho,
+        mu: &mut mu,
+        c: &mut c,
+        c2: &mut c2,
+        cp: &mut cp,
+        mat: &mut mat,
+        z: &mut z,
+        t1: &mut t1,
+        w1: &mut w1,
+        h: &mut h,
+        state: &mut &mut state,
+    };
+
+    dilithium_verify(&di, mem, &pk.bytes, m, &sig.bytes)
+}
+
+pub fn dilithium5_verify(
+    pk: &PublicKey<Dilithium5>,
+    m: &[u8],
+    sig: &Signature<Dilithium5>,
+) -> Result<(), Error> {
+    const di: DilithiumImpl = DILITHIUM5;
+
+    let mut buf = [0; di.K as usize * di.POLYW1_PACKEDBYTES as usize];
+    let mut rho = [0; SEEDBYTES];
+    let mut mu = [0; CRHBYTES];
+    let mut c = [0; SEEDBYTES];
+    let mut c2 = [0; SEEDBYTES];
+    let mut cp = poly::default();
+    let mut mat: [poly; di.k as usize * di.l as usize] = unsafe { core::mem::zeroed() };
     let mut z = <[poly; di.L as usize]>::default();
     let mut t1 = <[poly; di.K as usize]>::default();
     let mut w1 = <[poly; di.K as usize]>::default();
@@ -493,24 +604,24 @@ pub fn dilithium3_verify(
 
 fn dilithium_verify(
     di: &'static DilithiumImpl,
-    mut mem: VerifyMemoryPool<'_>,
+    mem: VerifyMemoryPool<'_>,
     pk_bytes: &[u8],
     m: &[u8],
     sig_bytes: &[u8],
 ) -> Result<(), Error> {
     unsafe {
-        let mut buf_ptr = mem.buf.as_mut_ptr();
-        let mut rho_ptr = mem.rho.as_mut_ptr();
-        let mut mu_ptr = mem.mu.as_mut_ptr();
-        let mut c_ptr = mem.c.as_mut_ptr();
-        let mut c2_ptr = mem.c2.as_mut_ptr();
-        let mut cp_ptr = mem.cp;
-        let mut mat_ptr = core::mem::transmute(mem.mat.as_mut_ptr());
-        let mut z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
-        let mut t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
-        let mut w1_ptr = core::mem::transmute(mem.w1.as_mut_ptr());
-        let mut h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
-        let mut state_ptr = mem.state;
+        let buf_ptr = mem.buf.as_mut_ptr();
+        let rho_ptr = mem.rho.as_mut_ptr();
+        let mu_ptr = mem.mu.as_mut_ptr();
+        let c_ptr = mem.c.as_mut_ptr();
+        let c2_ptr = mem.c2.as_mut_ptr();
+        let cp_ptr = mem.cp;
+        let mat_ptr = core::mem::transmute(mem.mat.as_mut_ptr());
+        let z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
+        let t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
+        let w1_ptr = core::mem::transmute(mem.w1.as_mut_ptr());
+        let h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
+        let state_ptr = mem.state;
 
         (di.unpack_pk)(rho_ptr, t1_ptr, pk_bytes.as_ptr());
         if 0 != (di.unpack_sig)(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
@@ -705,6 +816,17 @@ mod tests {
         dilithium3_keygen_from_seed,
         dilithium3_signature,
         dilithium3_verify
+    );    
+    test_refimpl_kat!(
+        test_refimpl_dilithium5_kat,
+        Dilithium5,
+        DILITHIUM5,
+        crystals_dilithium_sys::dilithium5::pqcrystals_dilithium5_ref_keypair,
+        crystals_dilithium_sys::dilithium5::pqcrystals_dilithium5_ref_signature,
+        crystals_dilithium_sys::dilithium5::pqcrystals_dilithium5_ref_verify,
+        dilithium5_keygen_from_seed,
+        dilithium5_signature,
+        dilithium5_verify
     );
 
     #[test]
