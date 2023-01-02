@@ -399,6 +399,60 @@ fn dilithium_signature(
     Ok(())
 }
 
+#[derive(Debug)]
+struct VerifyMemoryPool<'a> {
+    buf: &'a mut [u8],
+    rho: &'a mut [u8],
+    mu: &'a mut [u8],
+    c: &'a mut [u8],
+    c2: &'a mut [u8],
+    cp: &'a mut poly,
+    mat: &'a mut [poly],
+    z: &'a mut [poly],
+    t1: &'a mut [poly],
+    w1: &'a mut [poly],
+    h: &'a mut [poly],
+    state: &'a mut keccak_state,
+}
+
+pub fn dilithium2_verify(
+    pk: &PublicKey<Dilithium2>,
+    m: &[u8],
+    sig: &Signature<Dilithium2>,
+) -> Result<(), Error> {
+    const di: DilithiumImpl = DILITHIUM2;
+
+    let mut buf = [0; di.K as usize * di.POLYW1_PACKEDBYTES as usize];
+    let mut rho = [0; SEEDBYTES];
+    let mut mu = [0; CRHBYTES];
+    let mut c = [0; SEEDBYTES];
+    let mut c2 = [0; SEEDBYTES];
+    let mut cp = poly::default();
+    let mut mat = <[poly; (di.K * di.L) as usize]>::default();
+    let mut z = <[poly; di.L as usize]>::default();
+    let mut t1 = <[poly; di.K as usize]>::default();
+    let mut w1 = <[poly; di.K as usize]>::default();
+    let mut h = <[poly; di.K as usize]>::default();
+    let mut state = keccak_state::default();
+
+    let mem = VerifyMemoryPool {
+        buf: &mut buf,
+        rho: &mut rho,
+        mu: &mut mu,
+        c: &mut c,
+        c2: &mut c2,
+        cp: &mut cp,
+        mat: &mut mat,
+        z: &mut z,
+        t1: &mut t1,
+        w1: &mut w1,
+        h: &mut h,
+        state: &mut &mut state,
+    };
+
+    dilithium_verify(&di, mem, &pk.bytes, m, &sig.bytes)
+}
+
 pub fn dilithium3_verify(
     pk: &PublicKey<Dilithium3>,
     m: &[u8],
@@ -406,77 +460,115 @@ pub fn dilithium3_verify(
 ) -> Result<(), Error> {
     const di: DilithiumImpl = DILITHIUM3;
 
-    unsafe {
-        let mut buf = [0; di.K as usize * di.POLYW1_PACKEDBYTES as usize];
-        let mut rho = [0; SEEDBYTES];
-        let mut mu = [0; CRHBYTES];
-        let mut c = [0; SEEDBYTES];
-        let mut c2 = [0; SEEDBYTES];
-        let mut cp = poly::default();
-        let mut mat = <[polyvecl; DILITHIUM3.k as usize]>::default();
-        let mut z = polyvecl::default();
-        let mut t1 = polyveck::default();
-        let mut w1 = polyveck::default();
-        let mut h = polyveck::default();
-        let mut state = keccak_state::default();
+    let mut buf = [0; di.K as usize * di.POLYW1_PACKEDBYTES as usize];
+    let mut rho = [0; SEEDBYTES];
+    let mut mu = [0; CRHBYTES];
+    let mut c = [0; SEEDBYTES];
+    let mut c2 = [0; SEEDBYTES];
+    let mut cp = poly::default();
+    let mut mat = <[poly; (di.K * di.L) as usize]>::default();
+    let mut z = <[poly; di.L as usize]>::default();
+    let mut t1 = <[poly; di.K as usize]>::default();
+    let mut w1 = <[poly; di.K as usize]>::default();
+    let mut h = <[poly; di.K as usize]>::default();
+    let mut state = keccak_state::default();
 
-        (di.unpack_pk)(rho.as_mut_ptr(), &mut t1, pk.bytes.as_ptr());
-        if 0 != (di.unpack_sig)(c.as_mut_ptr(), &mut z, &mut h, sig.bytes.as_ptr()) {
+    let mem = VerifyMemoryPool {
+        buf: &mut buf,
+        rho: &mut rho,
+        mu: &mut mu,
+        c: &mut c,
+        c2: &mut c2,
+        cp: &mut cp,
+        mat: &mut mat,
+        z: &mut z,
+        t1: &mut t1,
+        w1: &mut w1,
+        h: &mut h,
+        state: &mut &mut state,
+    };
+
+    dilithium_verify(&di, mem, &pk.bytes, m, &sig.bytes)
+}
+
+fn dilithium_verify(
+    di: &'static DilithiumImpl,
+    mut mem: VerifyMemoryPool<'_>,
+    pk_bytes: &[u8],
+    m: &[u8],
+    sig_bytes: &[u8],
+) -> Result<(), Error> {
+    unsafe {
+        let mut buf_ptr = mem.buf.as_mut_ptr();
+        let mut rho_ptr = mem.rho.as_mut_ptr();
+        let mut mu_ptr = mem.mu.as_mut_ptr();
+        let mut c_ptr = mem.c.as_mut_ptr();
+        let mut c2_ptr = mem.c2.as_mut_ptr();
+        let mut cp_ptr = mem.cp;
+        let mut mat_ptr = core::mem::transmute(mem.mat.as_mut_ptr());
+        let mut z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
+        let mut t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
+        let mut w1_ptr = core::mem::transmute(mem.w1.as_mut_ptr());
+        let mut h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
+        let mut state_ptr = mem.state;
+
+        (di.unpack_pk)(rho_ptr, t1_ptr, pk_bytes.as_ptr());
+        if 0 != (di.unpack_sig)(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
             return Err(Error::InvalidSignature);
         }
-        if 0 != (di.polyvecl_chknorm)(&z, (di.GAMMA1 - di.BETA) as i32) {
+        if 0 != (di.polyvecl_chknorm)(z_ptr, (di.GAMMA1 - di.BETA) as i32) {
             return Err(Error::InvalidSignature);
         }
 
         // Compute tr := H(pk)
-        (di.shake256_init)(&mut state);
+        (di.shake256_init)(state_ptr);
         (di.shake256_absorb)(
-            &mut state,
-            pk.bytes.as_ptr(),
+            state_ptr,
+            pk_bytes.as_ptr(),
             di.CRYPTO_PUBLICKEYBYTES as usize,
         );
-        (di.shake256_finalize)(&mut state);
-        (di.shake256_squeeze)(mu.as_mut_ptr(), SEEDBYTES, &mut state);
+        (di.shake256_finalize)(state_ptr);
+        (di.shake256_squeeze)(mu_ptr, SEEDBYTES, state_ptr);
 
         // Compute mu := CRH(tr, msg)
-        (di.shake256_init)(&mut state);
-        (di.shake256_absorb)(&mut state, mu.as_ptr(), SEEDBYTES);
-        (di.shake256_absorb)(&mut state, m.as_ptr(), m.len());
-        (di.shake256_finalize)(&mut state);
-        (di.shake256_squeeze)(mu.as_mut_ptr(), CRHBYTES, &mut state);
+        (di.shake256_init)(state_ptr);
+        (di.shake256_absorb)(state_ptr, mu_ptr, SEEDBYTES);
+        (di.shake256_absorb)(state_ptr, m.as_ptr(), m.len());
+        (di.shake256_finalize)(state_ptr);
+        (di.shake256_squeeze)(mu_ptr, CRHBYTES, state_ptr);
 
         /* Matrix-vector multiplication; compute Az - c2^dt1 */
-        (di.poly_challenge)(&mut cp, c.as_ptr());
-        (di.polyvec_matrix_expand)(mat.as_mut_ptr(), rho.as_ptr());
+        (di.poly_challenge)(cp_ptr, c_ptr);
+        (di.polyvec_matrix_expand)(mat_ptr, rho_ptr);
 
-        (di.polyvecl_ntt)(&mut z);
-        (di.polyvec_matrix_pointwise_montgomery)(&mut w1, mat.as_ptr(), &z);
+        (di.polyvecl_ntt)(z_ptr);
+        (di.polyvec_matrix_pointwise_montgomery)(w1_ptr, mat_ptr, z_ptr);
 
-        (di.poly_ntt)(&mut cp);
-        (di.polyveck_shiftl)(&mut t1);
-        (di.polyveck_ntt)(&mut t1);
-        (di.polyveck_pointwise_poly_montgomery)(&mut t1, &cp, &t1);
+        (di.poly_ntt)(cp_ptr);
+        (di.polyveck_shiftl)(t1_ptr);
+        (di.polyveck_ntt)(t1_ptr);
+        (di.polyveck_pointwise_poly_montgomery)(t1_ptr, cp_ptr, t1_ptr);
 
-        (di.polyveck_sub)(&mut w1, &w1, &t1);
-        (di.polyveck_reduce)(&mut w1);
-        (di.polyveck_invntt_tomont)(&mut w1);
+        (di.polyveck_sub)(w1_ptr, w1_ptr, t1_ptr);
+        (di.polyveck_reduce)(w1_ptr);
+        (di.polyveck_invntt_tomont)(w1_ptr);
 
         // Reconstruct w1
-        (di.polyveck_caddq)(&mut w1);
-        (di.polyveck_use_hint)(&mut w1, &w1, &h);
-        (di.polyveck_pack_w1)(buf.as_mut_ptr(), &w1);
+        (di.polyveck_caddq)(w1_ptr);
+        (di.polyveck_use_hint)(w1_ptr, w1_ptr, h_ptr);
+        (di.polyveck_pack_w1)(buf_ptr, w1_ptr);
 
         // Call random oracle and verify challenge
-        (di.shake256_init)(&mut state);
-        (di.shake256_absorb)(&mut state, mu.as_ptr(), CRHBYTES);
+        (di.shake256_init)(state_ptr);
+        (di.shake256_absorb)(state_ptr, mu_ptr, CRHBYTES);
         (di.shake256_absorb)(
-            &mut state,
-            buf.as_ptr(),
+            state_ptr,
+            buf_ptr,
             di.K as usize * di.POLYW1_PACKEDBYTES as usize,
         );
-        (di.shake256_finalize)(&mut state);
-        (di.shake256_squeeze)(c2.as_mut_ptr(), SEEDBYTES, &mut state);
-        if c == c2 {
+        (di.shake256_finalize)(state_ptr);
+        (di.shake256_squeeze)(c2_ptr, SEEDBYTES, state_ptr);
+        if mem.c == mem.c2 {
             return Ok(());
         }
     }
@@ -551,7 +643,7 @@ mod tests {
                         ) {
                             panic!("KAT signature failed");
                         }
-                        let _verify_expected = 0
+                        let verify_expected = 0
                             == $ref_verify(
                                 sig_expected.as_ptr(),
                                 *siglen,
@@ -567,12 +659,24 @@ mod tests {
                         randombytes(keygen_seed.as_mut_ptr(), SEEDBYTES as u64);
                         let (sk_actual, pk_actual) = $actual_keygen(&keygen_seed).unwrap();
                         let sig_actual = $actual_signature(&sk_actual, msg).unwrap();
-                        // let verify_actual = $actual_verify(&pk_actual, msg, &sig_actual);
+                        let verify_actual = $actual_verify(&pk_actual, msg, &sig_actual);
 
-                        assert_eq!(&pk_actual.bytes[..], &pk_expected[..], "public keys did not match");
-                        assert_eq!(&sk_actual.bytes[..], &sk_expected[..], "secret keys did not match");
-                        assert_eq!(&sig_actual.bytes[..], &sig_expected[..], "signatures did not match");
-                        // assert_eq!(verify_actual.is_ok(), verify_exptected);
+                        assert_eq!(
+                            &pk_actual.bytes[..],
+                            &pk_expected[..],
+                            "public keys did not match"
+                        );
+                        assert_eq!(
+                            &sk_actual.bytes[..],
+                            &sk_expected[..],
+                            "secret keys did not match"
+                        );
+                        assert_eq!(
+                            &sig_actual.bytes[..],
+                            &sig_expected[..],
+                            "signatures did not match"
+                        );
+                        assert_eq!(verify_actual.is_ok(), verify_expected);
                     }
                 }
                 drop(rng_guard);
