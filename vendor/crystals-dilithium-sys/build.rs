@@ -47,6 +47,7 @@ fn main() {
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     for mode in modes {
         let bindings = bindgen::Builder::default()
+            .use_core()
             .header_contents(
                 &format!("dilithium{}_wrapper.h", mode)[..],
                 &format!("#define DILITHIUM_MODE {}", mode)[..],
