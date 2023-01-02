@@ -10,6 +10,29 @@ use crate::{
 use crystals_dilithium_sys as refimpl;
 use refimpl::dilithium3::{keccak_state, poly, polyveck, polyvecl};
 
+// TODO: LEFT HERE
+//
+// Let's now start reimplementing the C functions, I think it is wise to start
+// with all the fips202 code, and then move on to the other code.
+// I expect that we will have to struggle a lot with type conversions, but I
+// believe you can handle that. ;)
+//
+// Wrt generics and constants and everything, here are some guidelines to
+// follow:
+//   * Everything is a slice; or really: no arrays allowed!  All the array
+//     space is allocated in the memory pools by the callers.  The inner
+//     functions should not allocate those themselves, unless their length
+//     is the same for every variant.
+//   * Parameter data should go in a `const` params struct; but
+//     differing functions should use a vtable or a `match` expression.
+//       - I did not decide yet if a vtable is better than `match`, but I think
+//         we should go for a `match`, because that will always eliminate the
+//         bounds check.  The compiler can always decide to insert a vtable
+//         anyway.
+//   * If we decide to use a generic for the different variants, we must
+//     ensure that it is &dyn!
+//   * Type info cannot be generic in the inner functions.  (Use slices!)
+
 struct KeygenMemoryPool<'a> {
     sk: &'a mut [u8],
     pk: &'a mut [u8],

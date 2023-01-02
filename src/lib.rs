@@ -25,6 +25,6 @@ impl core::fmt::Display for Error {
     }
 }
 
-mod dilithium3;
+mod dilithium;
 mod params;
 mod variants;
