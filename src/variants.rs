@@ -4,30 +4,13 @@ use crystals_dilithium_sys::{dilithium2, dilithium3, dilithium5};
 
 use crate::params::DilithiumParams;
 
-type keccak_state = dilithium3::keccak_state;
+type keccak_state = crate::fips202::keccak_state;
 type poly = dilithium3::poly;
 type polyvecl = dilithium3::polyvecl;
 type polyveck = dilithium3::polyveck;
 
 #[allow(non_snake_case)]
 pub(crate) trait DilithiumVariant {
-    // Impl-independent functions
-    unsafe fn shake256_init(&self, state: *mut dilithium3::keccak_state);
-    unsafe fn shake256_absorb(
-        &self,
-        state: *mut dilithium3::keccak_state,
-        in_: *const u8,
-        inlen: usize,
-    );
-    unsafe fn shake256_finalize(&self, state: *mut dilithium3::keccak_state);
-    unsafe fn shake256_squeeze(
-        &self,
-        out: *mut u8,
-        outlen: usize,
-        state: *mut dilithium3::keccak_state,
-    );
-
-    // Impl-dependent functions
     unsafe fn poly_ntt(&self, v: *mut poly);
     unsafe fn polyvec_matrix_expand(&self, mat: *mut polyvecl, rho: *const u8);
     unsafe fn polyvec_matrix_pointwise_montgomery(
@@ -40,23 +23,13 @@ pub(crate) trait DilithiumVariant {
     unsafe fn polyveck_caddq(&self, v: *mut polyveck);
     unsafe fn polyveck_invntt_tomont(&self, v: *mut polyveck);
     unsafe fn polyveck_ntt(&self, v: *mut polyveck);
-    unsafe fn polyveck_power2round(
-        &self,
-        v1: *mut polyveck,
-        v0: *mut polyveck,
-        v: *const polyveck,
-    );
+    unsafe fn polyveck_power2round(&self, v1: *mut polyveck, v0: *mut polyveck, v: *const polyveck);
     unsafe fn polyveck_reduce(&self, v: *mut polyveck);
     unsafe fn polyveck_uniform_eta(&self, v: *mut polyveck, seed: *const u8, nonce: u16);
     unsafe fn polyvecl_ntt(&self, v: *mut polyvecl);
     unsafe fn polyvecl_uniform_eta(&self, v: *mut polyvecl, seed: *const u8, nonce: u16);
 
-    unsafe fn polyveck_decompose(
-        &self,
-        v1: *mut polyveck,
-        v0: *mut polyveck,
-        v: *const polyveck,
-    );
+    unsafe fn polyveck_decompose(&self, v1: *mut polyveck, v0: *mut polyveck, v: *const polyveck);
     unsafe fn polyveck_pack_w1(&self, r: *mut u8, w1: *const polyveck);
     unsafe fn poly_challenge(&self, c: *mut poly, seed: *const u8);
     unsafe fn polyvecl_pointwise_poly_montgomery(
@@ -83,13 +56,7 @@ pub(crate) trait DilithiumVariant {
         v0: *const polyveck,
         v1: *const polyveck,
     ) -> core::ffi::c_uint;
-    unsafe fn pack_sig(
-        &self,
-        sig: *mut u8,
-        c: *const u8,
-        z: *const polyvecl,
-        h: *const polyveck,
-    );
+    unsafe fn pack_sig(&self, sig: *mut u8, c: *const u8, z: *const polyvecl, h: *const polyveck);
     unsafe fn unpack_sk(
         &self,
         rho: *mut u8,
@@ -116,12 +83,7 @@ pub(crate) trait DilithiumVariant {
     unsafe fn unpack_pk(&self, rho: *mut u8, t1: *mut polyveck, pk: *const u8);
 
     unsafe fn polyveck_shiftl(&self, v: *mut polyveck);
-    unsafe fn polyveck_use_hint(
-        &self,
-        w: *mut polyveck,
-        v: *const polyveck,
-        h: *const polyveck,
-    );
+    unsafe fn polyveck_use_hint(&self, w: *mut polyveck, v: *const polyveck, h: *const polyveck);
 
     unsafe fn unpack_sig(
         &self,
@@ -140,22 +102,6 @@ pub(crate) struct Dilithium3;
 pub(crate) struct Dilithium5;
 
 impl DilithiumVariant for Dilithium2 {
-    unsafe fn shake256_init(&self, state: *mut keccak_state) {
-        dilithium2::pqcrystals_dilithium_fips202_ref_shake256_init(transmute(state))
-    }
-
-    unsafe fn shake256_absorb(&self, state: *mut keccak_state, in_: *const u8, inlen: usize) {
-        dilithium2::pqcrystals_dilithium_fips202_ref_shake256_absorb(transmute(state), in_, inlen)
-    }
-
-    unsafe fn shake256_finalize(&self, state: *mut keccak_state) {
-        dilithium2::pqcrystals_dilithium_fips202_ref_shake256_finalize(transmute(state))
-    }
-
-    unsafe fn shake256_squeeze(&self, out: *mut u8, outlen: usize, state: *mut keccak_state) {
-        dilithium2::pqcrystals_dilithium_fips202_ref_shake256_squeeze(out, outlen, transmute(state))
-    }
-
     unsafe fn poly_ntt(&self, v: *mut poly) {
         dilithium2::pqcrystals_dilithium2_ref_poly_ntt(transmute(v))
     }
@@ -222,12 +168,7 @@ impl DilithiumVariant for Dilithium2 {
         dilithium2::pqcrystals_dilithium2_ref_polyvecl_uniform_eta(transmute(v), seed, nonce)
     }
 
-    unsafe fn polyveck_decompose(
-        &self,
-        v1: *mut polyveck,
-        v0: *mut polyveck,
-        v: *const polyveck,
-    ) {
+    unsafe fn polyveck_decompose(&self, v1: *mut polyveck, v0: *mut polyveck, v: *const polyveck) {
         dilithium2::pqcrystals_dilithium2_ref_polyveck_decompose(
             transmute(v1),
             transmute(v0),
@@ -306,13 +247,7 @@ impl DilithiumVariant for Dilithium2 {
         )
     }
 
-    unsafe fn pack_sig(
-        &self,
-        sig: *mut u8,
-        c: *const u8,
-        z: *const polyvecl,
-        h: *const polyveck,
-    ) {
+    unsafe fn pack_sig(&self, sig: *mut u8, c: *const u8, z: *const polyvecl, h: *const polyveck) {
         dilithium2::pqcrystals_dilithium2_ref_pack_sig(sig, c, transmute(z), transmute(h))
     }
 
@@ -374,12 +309,7 @@ impl DilithiumVariant for Dilithium2 {
         dilithium2::pqcrystals_dilithium2_ref_polyveck_shiftl(transmute(v))
     }
 
-    unsafe fn polyveck_use_hint(
-        &self,
-        w: *mut polyveck,
-        v: *const polyveck,
-        h: *const polyveck,
-    ) {
+    unsafe fn polyveck_use_hint(&self, w: *mut polyveck, v: *const polyveck, h: *const polyveck) {
         dilithium2::pqcrystals_dilithium2_ref_polyveck_use_hint(
             transmute(w),
             transmute(v),
@@ -399,22 +329,6 @@ impl DilithiumVariant for Dilithium2 {
 }
 
 impl DilithiumVariant for Dilithium3 {
-    unsafe fn shake256_init(&self, state: *mut keccak_state) {
-        dilithium3::pqcrystals_dilithium_fips202_ref_shake256_init(state)
-    }
-
-    unsafe fn shake256_absorb(&self, state: *mut keccak_state, in_: *const u8, inlen: usize) {
-        dilithium3::pqcrystals_dilithium_fips202_ref_shake256_absorb(state, in_, inlen)
-    }
-
-    unsafe fn shake256_finalize(&self, state: *mut keccak_state) {
-        dilithium3::pqcrystals_dilithium_fips202_ref_shake256_finalize(state)
-    }
-
-    unsafe fn shake256_squeeze(&self, out: *mut u8, outlen: usize, state: *mut keccak_state) {
-        dilithium3::pqcrystals_dilithium_fips202_ref_shake256_squeeze(out, outlen, state)
-    }
-
     unsafe fn poly_ntt(&self, v: *mut poly) {
         dilithium3::pqcrystals_dilithium3_ref_poly_ntt(v)
     }
@@ -473,12 +387,7 @@ impl DilithiumVariant for Dilithium3 {
         dilithium3::pqcrystals_dilithium3_ref_polyvecl_uniform_eta(v, seed, nonce)
     }
 
-    unsafe fn polyveck_decompose(
-        &self,
-        v1: *mut polyveck,
-        v0: *mut polyveck,
-        v: *const polyveck,
-    ) {
+    unsafe fn polyveck_decompose(&self, v1: *mut polyveck, v0: *mut polyveck, v: *const polyveck) {
         dilithium3::pqcrystals_dilithium3_ref_polyveck_decompose(v1, v0, v)
     }
 
@@ -541,13 +450,7 @@ impl DilithiumVariant for Dilithium3 {
         dilithium3::pqcrystals_dilithium3_ref_polyveck_make_hint(h, v0, v1)
     }
 
-    unsafe fn pack_sig(
-        &self,
-        sig: *mut u8,
-        c: *const u8,
-        z: *const polyvecl,
-        h: *const polyveck,
-    ) {
+    unsafe fn pack_sig(&self, sig: *mut u8, c: *const u8, z: *const polyvecl, h: *const polyveck) {
         dilithium3::pqcrystals_dilithium3_ref_pack_sig(sig, c, z, h)
     }
 
@@ -593,12 +496,7 @@ impl DilithiumVariant for Dilithium3 {
         dilithium3::pqcrystals_dilithium3_ref_polyveck_shiftl(v)
     }
 
-    unsafe fn polyveck_use_hint(
-        &self,
-        w: *mut polyveck,
-        v: *const polyveck,
-        h: *const polyveck,
-    ) {
+    unsafe fn polyveck_use_hint(&self, w: *mut polyveck, v: *const polyveck, h: *const polyveck) {
         dilithium3::pqcrystals_dilithium3_ref_polyveck_use_hint(w, v, h)
     }
 
@@ -614,22 +512,6 @@ impl DilithiumVariant for Dilithium3 {
 }
 
 impl DilithiumVariant for Dilithium5 {
-    unsafe fn shake256_init(&self, state: *mut keccak_state) {
-        dilithium5::pqcrystals_dilithium_fips202_ref_shake256_init(transmute(state))
-    }
-
-    unsafe fn shake256_absorb(&self, state: *mut keccak_state, in_: *const u8, inlen: usize) {
-        dilithium5::pqcrystals_dilithium_fips202_ref_shake256_absorb(transmute(state), in_, inlen)
-    }
-
-    unsafe fn shake256_finalize(&self, state: *mut keccak_state) {
-        dilithium5::pqcrystals_dilithium_fips202_ref_shake256_finalize(transmute(state))
-    }
-
-    unsafe fn shake256_squeeze(&self, out: *mut u8, outlen: usize, state: *mut keccak_state) {
-        dilithium5::pqcrystals_dilithium_fips202_ref_shake256_squeeze(out, outlen, transmute(state))
-    }
-
     unsafe fn poly_ntt(&self, v: *mut poly) {
         dilithium5::pqcrystals_dilithium5_ref_poly_ntt(transmute(v))
     }
@@ -696,12 +578,7 @@ impl DilithiumVariant for Dilithium5 {
         dilithium5::pqcrystals_dilithium5_ref_polyvecl_uniform_eta(transmute(v), seed, nonce)
     }
 
-    unsafe fn polyveck_decompose(
-        &self,
-        v1: *mut polyveck,
-        v0: *mut polyveck,
-        v: *const polyveck,
-    ) {
+    unsafe fn polyveck_decompose(&self, v1: *mut polyveck, v0: *mut polyveck, v: *const polyveck) {
         dilithium5::pqcrystals_dilithium5_ref_polyveck_decompose(
             transmute(v1),
             transmute(v0),
@@ -780,13 +657,7 @@ impl DilithiumVariant for Dilithium5 {
         )
     }
 
-    unsafe fn pack_sig(
-        &self,
-        sig: *mut u8,
-        c: *const u8,
-        z: *const polyvecl,
-        h: *const polyveck,
-    ) {
+    unsafe fn pack_sig(&self, sig: *mut u8, c: *const u8, z: *const polyvecl, h: *const polyveck) {
         dilithium5::pqcrystals_dilithium5_ref_pack_sig(sig, c, transmute(z), transmute(h))
     }
 
@@ -848,12 +719,7 @@ impl DilithiumVariant for Dilithium5 {
         dilithium5::pqcrystals_dilithium5_ref_polyveck_shiftl(transmute(v))
     }
 
-    unsafe fn polyveck_use_hint(
-        &self,
-        w: *mut polyveck,
-        v: *const polyveck,
-        h: *const polyveck,
-    ) {
+    unsafe fn polyveck_use_hint(&self, w: *mut polyveck, v: *const polyveck, h: *const polyveck) {
         dilithium5::pqcrystals_dilithium5_ref_polyveck_use_hint(
             transmute(w),
             transmute(v),

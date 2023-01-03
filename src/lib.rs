@@ -29,3 +29,5 @@ mod dilithium;
 mod params;
 mod api;
 mod variants;
+
+mod fips202;

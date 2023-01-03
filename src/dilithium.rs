@@ -1,12 +1,12 @@
+use crate::{api, variants};
 use crate::{
-    params::{DilithiumParams, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
     api::{
         Dilithium2, Dilithium3, Dilithium5, DilithiumVariant, PublicKey, SecretKey, Signature,
         SEED_SIZE,
     },
+    params::{DilithiumParams, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
     Error,
 };
-use crate::{api, variants};
 use crystals_dilithium_sys as refimpl;
 use refimpl::dilithium3::{keccak_state, poly, polyveck, polyvecl};
 
@@ -47,13 +47,7 @@ struct KeygenMemoryPool<'a> {
 #[inline]
 pub fn dilithium2_keygen_from_seed(
     seed: &[u8],
-) -> Result<
-    (
-        api::SecretKey<Dilithium2>,
-        api::PublicKey<Dilithium2>,
-    ),
-    crate::Error,
-> {
+) -> Result<(api::SecretKey<Dilithium2>, api::PublicKey<Dilithium2>), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
     let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES as usize];
     let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
@@ -162,13 +156,12 @@ fn dilithium_keygen_from_seed(
         let s2_ptr: *mut polyveck = core::mem::transmute(mem.s2.as_mut_ptr());
         let t1_ptr: *mut polyveck = core::mem::transmute(mem.t1.as_mut_ptr());
         let t0_ptr: *mut polyveck = core::mem::transmute(mem.t0.as_mut_ptr());
-        let mut state = keccak_state::default();
-        mem.seedbuf[0..SEEDBYTES].copy_from_slice(seed);
+        let mut state = crate::fips202::keccak_state::default();
 
-        v.shake256_init(&mut state);
-        v.shake256_absorb(&mut state, mem.seedbuf.as_ptr(), SEEDBYTES);
-        v.shake256_finalize(&mut state);
-        v.shake256_squeeze(mem.seedbuf.as_mut_ptr(), mem.seedbuf.len(), &mut state);
+        crate::fips202::shake256_init(&mut state);
+        crate::fips202::shake256_absorb(&mut state, seed);
+        crate::fips202::shake256_finalize(&mut state);
+        crate::fips202::shake256_squeeze(mem.seedbuf, &mut state);
 
         let (rho, seedbuf) = mem.seedbuf.split_at_mut(SEEDBYTES);
         let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
@@ -201,10 +194,10 @@ fn dilithium_keygen_from_seed(
         v.pack_pk(mem.pk.as_mut_ptr(), rho.as_ptr(), t1_ptr);
 
         // Compute H(rho, t1) and write secret key
-        v.shake256_init(&mut state);
-        v.shake256_absorb(&mut state, mem.pk.as_ptr(), mem.pk.len());
-        v.shake256_finalize(&mut state);
-        v.shake256_squeeze(mem.tr.as_mut_ptr(), SEEDBYTES, &mut state);
+        crate::fips202::shake256_init(&mut state);
+        crate::fips202::shake256_absorb(&mut state, mem.pk);
+        crate::fips202::shake256_finalize(&mut state);
+        crate::fips202::shake256_squeeze(mem.tr, &mut state);
         v.pack_sk(
             mem.sk.as_mut_ptr(),
             rho.as_ptr(),
@@ -232,7 +225,7 @@ struct SignMemoryPool<'a> {
     w0: &'a mut [poly],
     h: &'a mut [poly],
     cp: &'a mut poly,
-    state: &'a mut keccak_state,
+    state: &'a mut crate::fips202::keccak_state,
 }
 
 pub fn dilithium2_signature(
@@ -268,7 +261,7 @@ pub fn dilithium2_signature(
         w0: &mut w0[..],
         h: &mut h[..],
         cp: &mut cp,
-        state: &mut state,
+        state: &mut crate::fips202::keccak_state::default(),
     };
     dilithium_signature(&P, mem, &sk.bytes, m)?;
     Ok(Signature { bytes: sigbytes })
@@ -307,7 +300,7 @@ pub fn dilithium3_signature(
         w0: &mut w0[..],
         h: &mut h[..],
         cp: &mut cp,
-        state: &mut state,
+        state: &mut crate::fips202::keccak_state::default(),
     };
 
     dilithium_signature(&P, mem, &sk.bytes, m)?;
@@ -346,7 +339,7 @@ pub fn dilithium5_signature(
         w0: &mut w0[..],
         h: &mut h[..],
         cp: &mut cp,
-        state: &mut state,
+        state: &mut crate::fips202::keccak_state::default(),
     };
 
     dilithium_signature(&P, mem, &sk.bytes, m)?;
@@ -391,18 +384,18 @@ fn dilithium_signature(
         );
 
         // Compute mu := CRH(tr || msg)
-        v.shake256_init(mem.state);
-        v.shake256_absorb(mem.state, tr.as_ptr(), SEEDBYTES);
-        v.shake256_absorb(mem.state, m.as_ptr(), m.len());
-        v.shake256_finalize(mem.state);
-        v.shake256_squeeze(mu.as_mut_ptr(), CRHBYTES, mem.state);
+        crate::fips202::shake256_init(mem.state);
+        crate::fips202::shake256_absorb(mem.state, tr);
+        crate::fips202::shake256_absorb(mem.state, m);
+        crate::fips202::shake256_finalize(mem.state);
+        crate::fips202::shake256_squeeze(mu, mem.state);
 
         // Compute rhoprime := CRH(K || mu)
-        v.shake256_init(mem.state);
-        v.shake256_absorb(mem.state, key.as_ptr(), SEEDBYTES);
-        v.shake256_absorb(mem.state, mu.as_ptr(), CRHBYTES);
-        v.shake256_finalize(mem.state);
-        v.shake256_squeeze(rhoprime.as_mut_ptr(), CRHBYTES, mem.state);
+        crate::fips202::shake256_init(mem.state);
+        crate::fips202::shake256_absorb(mem.state, key);
+        crate::fips202::shake256_absorb(mem.state, mu);
+        crate::fips202::shake256_finalize(mem.state);
+        crate::fips202::shake256_squeeze(rhoprime, mem.state);
 
         // Expand matrix and transform vectors
         v.polyvec_matrix_expand(mat_ptr, rho.as_ptr());
@@ -436,15 +429,12 @@ fn dilithium_signature(
             v.polyveck_pack_w1(mem.sigbytes.as_mut_ptr(), w1_ptr);
 
             // Compute challenge
-            v.shake256_init(mem.state);
-            v.shake256_absorb(mem.state, mu.as_ptr(), CRHBYTES);
-            v.shake256_absorb(
-                mem.state,
-                mem.sigbytes.as_ptr(),
-                p.k as usize * p.POLYW1_PACKEDBYTES as usize,
-            );
-            v.shake256_finalize(mem.state);
-            v.shake256_squeeze(mem.sigbytes.as_mut_ptr(), SEEDBYTES, mem.state);
+            crate::fips202::shake256_init(mem.state);
+            crate::fips202::shake256_absorb(mem.state, mu);
+            let w1_packed = &mem.sigbytes[..p.k as usize * p.POLYW1_PACKEDBYTES as usize];
+            crate::fips202::shake256_absorb(mem.state, w1_packed);
+            crate::fips202::shake256_finalize(mem.state);
+            crate::fips202::shake256_squeeze(&mut mem.sigbytes[..SEEDBYTES], mem.state);
             v.poly_challenge(mem.cp, mem.sigbytes.as_ptr());
             v.poly_ntt(mem.cp);
 
@@ -506,7 +496,7 @@ struct VerifyMemoryPool<'a> {
     t1: &'a mut [poly],
     w1: &'a mut [poly],
     h: &'a mut [poly],
-    state: &'a mut keccak_state,
+    state: &'a mut crate::fips202::keccak_state,
 }
 
 pub fn dilithium2_verify(
@@ -527,7 +517,7 @@ pub fn dilithium2_verify(
     let mut t1 = <[poly; di.K as usize]>::default();
     let mut w1 = <[poly; di.K as usize]>::default();
     let mut h = <[poly; di.K as usize]>::default();
-    let mut state = keccak_state::default();
+    let mut state = crate::fips202::keccak_state::default();
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -541,7 +531,7 @@ pub fn dilithium2_verify(
         t1: &mut t1,
         w1: &mut w1,
         h: &mut h,
-        state: &mut &mut state,
+        state: &mut state,
     };
 
     dilithium_verify(&di, mem, &pk.bytes, m, &sig.bytes)
@@ -566,7 +556,7 @@ pub fn dilithium3_verify(
     let mut t1 = <[poly; p.K as usize]>::default();
     let mut w1 = <[poly; p.K as usize]>::default();
     let mut h = <[poly; p.K as usize]>::default();
-    let mut state = keccak_state::default();
+    let mut state = crate::fips202::keccak_state::default();
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -580,7 +570,7 @@ pub fn dilithium3_verify(
         t1: &mut t1,
         w1: &mut w1,
         h: &mut h,
-        state: &mut &mut state,
+        state: &mut state,
     };
 
     dilithium_verify(&p, mem, &pk.bytes, m, &sig.bytes)
@@ -604,7 +594,7 @@ pub fn dilithium5_verify(
     let mut t1 = <[poly; P.K as usize]>::default();
     let mut w1 = <[poly; P.K as usize]>::default();
     let mut h = <[poly; P.K as usize]>::default();
-    let mut state = keccak_state::default();
+    let mut state = crate::fips202::keccak_state::default();
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -618,7 +608,7 @@ pub fn dilithium5_verify(
         t1: &mut t1,
         w1: &mut w1,
         h: &mut h,
-        state: &mut &mut state,
+        state: &mut state,
     };
 
     dilithium_verify(&P, mem, &pk.bytes, m, &sig.bytes)
@@ -636,16 +626,13 @@ fn dilithium_verify(
     unsafe {
         let buf_ptr = mem.buf.as_mut_ptr();
         let rho_ptr = mem.rho.as_mut_ptr();
-        let mu_ptr = mem.mu.as_mut_ptr();
         let c_ptr = mem.c.as_mut_ptr();
-        let c2_ptr = mem.c2.as_mut_ptr();
         let cp_ptr = mem.cp;
         let mat_ptr = core::mem::transmute(mem.mat.as_mut_ptr());
         let z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
         let t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
         let w1_ptr = core::mem::transmute(mem.w1.as_mut_ptr());
         let h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
-        let state_ptr = mem.state;
 
         v.unpack_pk(rho_ptr, t1_ptr, pk_bytes.as_ptr());
         if 0 != v.unpack_sig(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
@@ -656,21 +643,20 @@ fn dilithium_verify(
         }
 
         // Compute tr := H(pk)
-        v.shake256_init(state_ptr);
-        v.shake256_absorb(
-            state_ptr,
-            pk_bytes.as_ptr(),
-            p.CRYPTO_PUBLICKEYBYTES as usize,
-        );
-        v.shake256_finalize(state_ptr);
-        v.shake256_squeeze(mu_ptr, SEEDBYTES, state_ptr);
+        crate::fips202::shake256_init(mem.state);
+        crate::fips202::shake256_absorb(mem.state, pk_bytes);
+        crate::fips202::shake256_finalize(mem.state);
+        let tr = &mut mem.mu[0..SEEDBYTES];
+        crate::fips202::shake256_squeeze(tr, mem.state);
 
         // Compute mu := CRH(tr, msg)
-        v.shake256_init(state_ptr);
-        v.shake256_absorb(state_ptr, mu_ptr, SEEDBYTES);
-        v.shake256_absorb(state_ptr, m.as_ptr(), m.len());
-        v.shake256_finalize(state_ptr);
-        v.shake256_squeeze(mu_ptr, CRHBYTES, state_ptr);
+        crate::fips202::shake256_init(mem.state);
+        crate::fips202::shake256_absorb(mem.state, tr);
+
+        crate::fips202::shake256_absorb(mem.state, m);
+        crate::fips202::shake256_finalize(mem.state);
+        drop(tr);
+        crate::fips202::shake256_squeeze(mem.mu, mem.state);
 
         /* Matrix-vector multiplication; compute Az - c2^dt1 */
         v.poly_challenge(cp_ptr, c_ptr);
@@ -694,15 +680,11 @@ fn dilithium_verify(
         v.polyveck_pack_w1(buf_ptr, w1_ptr);
 
         // Call random oracle and verify challenge
-        v.shake256_init(state_ptr);
-        v.shake256_absorb(state_ptr, mu_ptr, CRHBYTES);
-        v.shake256_absorb(
-            state_ptr,
-            buf_ptr,
-            p.K as usize * p.POLYW1_PACKEDBYTES as usize,
-        );
-        v.shake256_finalize(state_ptr);
-        v.shake256_squeeze(c2_ptr, SEEDBYTES, state_ptr);
+        crate::fips202::shake256_init(mem.state);
+        crate::fips202::shake256_absorb(mem.state, mem.mu);
+        crate::fips202::shake256_absorb(mem.state, mem.buf);
+        crate::fips202::shake256_finalize(mem.state);
+        crate::fips202::shake256_squeeze(mem.c2, mem.state);
         if mem.c == mem.c2 {
             return Ok(());
         }
