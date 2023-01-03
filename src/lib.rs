@@ -27,4 +27,5 @@ impl core::fmt::Display for Error {
 
 mod dilithium;
 mod params;
+mod api;
 mod variants;
