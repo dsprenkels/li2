@@ -9,10 +9,7 @@
 //! We will have to add a generic lifetime to the type signature s.t. we can
 //! have keys that are outlived by the buffer on which they are based.
 
-pub use crypto::signature;
-
-/// Size of the seed that generates a secret key.
-pub const SEED_SIZE: usize = 32;
+pub use signature;
 
 /// `DilithiumVariant` specifies the variant of Dilithium.  The variant
 /// specifies which algorithm is executed from a high level.  For example:
@@ -22,6 +19,8 @@ pub const SEED_SIZE: usize = 32;
 /// implementation.  The same `DilithiumVariant` is used, regardless of
 /// the platform is it compiled for.
 pub trait DilithiumVariant: core::fmt::Debug {
+    /// Size of the seed that generates a secret key.
+    const SEED_SIZE: usize = 32;
     const SECKEY_SIZE: usize;
     const PUBKEY_SIZE: usize;
     const SIG_SIZE: usize;

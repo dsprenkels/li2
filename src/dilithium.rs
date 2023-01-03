@@ -1,14 +1,11 @@
-use crate::{api, variants};
+use crate::api;
 use crate::{
-    api::{
-        Dilithium2, Dilithium3, Dilithium5, DilithiumVariant, PublicKey, SecretKey, Signature,
-        SEED_SIZE,
-    },
+    api::{Dilithium2, Dilithium3, Dilithium5, PublicKey, SecretKey, Signature},
     params::{DilithiumParams, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
     Error,
 };
 use crystals_dilithium_sys as refimpl;
-use refimpl::dilithium3::{keccak_state, poly, polyveck, polyvecl};
+use refimpl::dilithium3::{poly, polyveck, polyvecl};
 
 // TODO: LEFT HERE
 //
@@ -710,10 +707,11 @@ mod tests {
     static KAT_RNG_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::default());
 
     macro_rules! test_refimpl_kat {
-        ( $name:ident, $variant:ty, $p:expr, $ref_keypair:expr, $ref_signature:expr, $ref_verify:expr, $actual_keygen:expr, $actual_signature:expr, $actual_verify:expr ) => {
+        ( $name:ident, $params:expr, $ref_keypair:expr, $ref_signature:expr, $ref_verify:expr, $actual_keygen:expr, $actual_signature:expr, $actual_verify:expr ) => {
             #[test]
             fn $name() {
-                type V = $variant;
+                let p = $params;
+
                 let rng_guard = KAT_RNG_MUTEX.lock();
 
                 let mut seeds = [[0; 48]; 100];
@@ -741,9 +739,9 @@ mod tests {
                     unsafe {
                         let mlen = 33 * (idx + 1);
                         let msg = &msgs[idx][0..mlen];
-                        let mut sk_expected = vec![0; V::SECKEY_SIZE];
-                        let mut pk_expected = vec![0; V::PUBKEY_SIZE];
-                        let mut sig_expected = vec![0; V::SIG_SIZE];
+                        let mut sk_expected = vec![0; p.CRYPTO_SECRETKEYBYTES as usize];
+                        let mut pk_expected = vec![0; p.CRYPTO_PUBLICKEYBYTES as usize];
+                        let mut sig_expected = vec![0; p.CRYPTO_BYTES as usize];
                         let ref mut siglen = 0;
 
                         // Generate the expected values
@@ -768,7 +766,7 @@ mod tests {
                                 mlen,
                                 pk_expected.as_ptr(),
                             );
-                        assert_eq!(*siglen, V::SIG_SIZE);
+                        assert_eq!(*siglen, p.CRYPTO_BYTES as usize);
 
                         // Generate the actual values
                         randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
@@ -803,7 +801,6 @@ mod tests {
 
     test_refimpl_kat!(
         test_refimpl_dilithium2_kat,
-        Dilithium2,
         DILITHIUM2,
         crystals_dilithium_sys::dilithium2::pqcrystals_dilithium2_ref_keypair,
         crystals_dilithium_sys::dilithium2::pqcrystals_dilithium2_ref_signature,
@@ -814,7 +811,6 @@ mod tests {
     );
     test_refimpl_kat!(
         test_refimpl_dilithium3_kat,
-        Dilithium3,
         DILITHIUM3,
         crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_keypair,
         crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_signature,
@@ -825,7 +821,6 @@ mod tests {
     );
     test_refimpl_kat!(
         test_refimpl_dilithium5_kat,
-        Dilithium5,
         DILITHIUM5,
         crystals_dilithium_sys::dilithium5::pqcrystals_dilithium5_ref_keypair,
         crystals_dilithium_sys::dilithium5::pqcrystals_dilithium5_ref_signature,
@@ -842,7 +837,7 @@ mod tests {
         // is completely correct; first for Dilithium3 and then for Dilithium2
         // and Dilithium5
 
-        let seed = [0; SEED_SIZE];
+        let seed = [0; SEEDBYTES];
         let (sk_actual, pk_actual) = dilithium3_keygen_from_seed(&seed).unwrap();
 
         // TODO: Check whether t0 + t1 << D == t
@@ -851,11 +846,11 @@ mod tests {
 
     #[test]
     fn test_empty_message() {
-        let seed = [0; SEED_SIZE];
+        let seed = [0; SEEDBYTES];
         let (sk, pk) = dilithium3_keygen_from_seed(&seed).unwrap();
 
         let sigbytes_expected = unsafe {
-            let mut sig = [0; Dilithium3::SIG_SIZE];
+            let mut sig = [0; DILITHIUM3.CRYPTO_BYTES as usize];
             let mut siglen = 0;
             crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_signature(
                 sig.as_mut_ptr(),
@@ -864,7 +859,7 @@ mod tests {
                 0,
                 sk.bytes.as_ptr(),
             );
-            assert_eq!(siglen, Dilithium3::SIG_SIZE, "siglen mismatch");
+            assert_eq!(siglen, DILITHIUM3.CRYPTO_BYTES as usize, "siglen mismatch");
             sig
         };
         let sig_actual = dilithium3_signature(&sk, &[]).unwrap();

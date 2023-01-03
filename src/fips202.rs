@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+// TODO: Separate states with types
+
 use core::mem::size_of;
 
 const SHAKE128_RATE: usize = 168;
@@ -78,7 +80,7 @@ const KeccakF_RoundConstants: [u64; NROUNDS] = [
 //  *
 //  * Arguments:   - uint64_t *state: pointer to input/output Keccak state
 //  **************************************************/
-pub fn KeccakF1600_StatePermute(state: &mut [u64; 25]) {
+pub(crate) fn KeccakF1600_StatePermute(state: &mut [u64; 25]) {
     // copyFromState(A, state)
     let mut Aba = state[0];
     let mut Abe = state[1];
@@ -366,7 +368,7 @@ fn keccak_absorb(s: &mut [u64; 25], mut pos: usize, rate: usize, mut input: &[u8
         input = &input[1..];
         pos += 1;
     }
-    
+
     debug_assert_eq!(input, &[]);
     pos
 }
@@ -435,14 +437,14 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
             KeccakF1600_StatePermute(s);
             pos = 0;
         }
-        for i in pos..core::cmp::min(rate, pos+out.len()) {
-            out[0] = (s[i/8] >> (8*(i%8))) as u8;
+        for i in pos..core::cmp::min(rate, pos + out.len()) {
+            out[0] = (s[i / 8] >> (8 * (i % 8))) as u8;
             out = &mut out[1..];
             pos += 1;
         }
     }
     assert_eq!(out, &[]);
-    pos        
+    pos
 }
 
 //  static unsigned int keccak_squeeze(uint8_t *out,
@@ -541,6 +543,11 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
 //  *
 //  * Arguments:   - keccak_state *state: pointer to (uninitialized) Keccak state
 //  **************************************************/
+pub(crate) fn shake128_init(state: &mut keccak_state) {
+    keccak_init(&mut state.s);
+    state.pos = 0;
+}
+
 //  void shake128_init(keccak_state *state)
 //  {
 //    keccak_init(state->s);
@@ -556,6 +563,10 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
 //  *              - const uint8_t *in: pointer to input to be absorbed into s
 //  *              - size_t inlen: length of input in bytes
 //  **************************************************/
+pub(crate) fn shake128_absorb(state: &mut keccak_state, input: &[u8]) {
+    state.pos = keccak_absorb(&mut state.s, state.pos, SHAKE128_RATE, input);
+}
+
 //  void shake128_absorb(keccak_state *state, const uint8_t *in, size_t inlen)
 //  {
 //    state->pos = keccak_absorb(state->s, state->pos, SHAKE128_RATE, in, inlen);
@@ -568,6 +579,11 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
 //  *
 //  * Arguments:   - keccak_state *state: pointer to Keccak state
 //  **************************************************/
+pub(crate) fn shake128_finalize(state: &mut keccak_state) {
+    keccak_finalize(&mut state.s, state.pos, SHAKE128_RATE, 0x1F);
+    state.pos = SHAKE128_RATE;
+}
+
 //  void shake128_finalize(keccak_state *state)
 //  {
 //    keccak_finalize(state->s, state->pos, SHAKE128_RATE, 0x1F);
@@ -584,6 +600,9 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
 //  *              - size_t outlen : number of bytes to be squeezed (written to output)
 //  *              - keccak_state *s: pointer to input/output Keccak state
 //  **************************************************/
+pub(crate) fn shake128_squeeze(out: &mut [u8], state: &mut keccak_state) {
+    state.pos = keccak_squeeze(out, &mut state.s, state.pos, SHAKE128_RATE);
+}
 //  void shake128_squeeze(uint8_t *out, size_t outlen, keccak_state *state)
 //  {
 //    state->pos = keccak_squeeze(out, outlen, state->s, state->pos, SHAKE128_RATE);
@@ -628,7 +647,7 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
 //  *
 //  * Arguments:   - keccak_state *state: pointer to (uninitialized) Keccak state
 //  **************************************************/
-pub fn shake256_init(state: &mut keccak_state) {
+pub(crate) fn shake256_init(state: &mut keccak_state) {
     keccak_init(&mut state.s);
     state.pos = 0;
 }
@@ -647,7 +666,7 @@ pub fn shake256_init(state: &mut keccak_state) {
 //  *              - const uint8_t *in: pointer to input to be absorbed into s
 //  *              - size_t inlen: length of input in bytes
 //  **************************************************/
-pub fn shake256_absorb(state: &mut keccak_state, input: &[u8]) {
+pub(crate) fn shake256_absorb(state: &mut keccak_state, input: &[u8]) {
     state.pos = keccak_absorb(&mut state.s, state.pos, SHAKE256_RATE, input);
 }
 
@@ -663,7 +682,7 @@ pub fn shake256_absorb(state: &mut keccak_state, input: &[u8]) {
 //  *
 //  * Arguments:   - keccak_state *state: pointer to Keccak state
 //  **************************************************/
-pub fn shake256_finalize(state: &mut keccak_state) {
+pub(crate) fn shake256_finalize(state: &mut keccak_state) {
     keccak_finalize(&mut state.s, state.pos, SHAKE256_RATE, 0x1F);
     state.pos = SHAKE256_RATE;
 }
@@ -683,7 +702,7 @@ pub fn shake256_finalize(state: &mut keccak_state) {
 //  *              - size_t outlen : number of bytes to be squeezed (written to output)
 //  *              - keccak_state *s: pointer to input/output Keccak state
 //  **************************************************/
-pub fn shake256_squeeze(out: &mut [u8], state: &mut keccak_state) {
+pub(crate) fn shake256_squeeze(out: &mut [u8], state: &mut keccak_state) {
     state.pos = keccak_squeeze(out, &mut state.s, state.pos, SHAKE256_RATE);
 }
 
