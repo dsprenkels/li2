@@ -4,7 +4,6 @@ use crystals_dilithium_sys::{dilithium2, dilithium3, dilithium5};
 
 use crate::params::DilithiumParams;
 
-type keccak_state = crate::fips202::keccak_state;
 type poly = dilithium3::poly;
 type polyvecl = dilithium3::polyvecl;
 type polyveck = dilithium3::polyveck;

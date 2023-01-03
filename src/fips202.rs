@@ -1,7 +1,5 @@
 #![allow(non_snake_case)]
 
-// TODO: Separate states with types
-
 use core::mem::size_of;
 
 const SHAKE128_RATE: usize = 168;
@@ -11,9 +9,71 @@ const SHA3_512_RATE: usize = 72;
 const NROUNDS: usize = 24;
 
 #[derive(Clone, Debug, Default)]
-pub struct keccak_state {
+// TODO: Can this struct be hidden at some point?
+pub(crate) struct KeccakState {
     s: [u64; 25],
     pos: usize,
+}
+
+#[derive(Debug)]
+pub struct SHAKE256 {
+    keccak: KeccakState,
+}
+#[derive(Debug)]
+pub struct SHAKE256Reader<'a> {
+    shake: &'a mut SHAKE256,
+}
+
+impl Default for SHAKE256 {
+    fn default() -> Self {
+        let mut xof = SHAKE256 {
+            keccak: KeccakState::default(),
+        };
+        xof.reset();
+        xof
+    }
+}
+
+impl digest::Update for &mut SHAKE256 {
+    fn update(&mut self, data: &[u8]) {
+        self.keccak.pos = keccak_absorb(&mut self.keccak.s, self.keccak.pos, SHAKE256_RATE, data);
+    }
+}
+
+impl<'a> digest::ExtendableOutput for &'a mut SHAKE256 {
+    type Reader = SHAKE256Reader<'a>;
+
+    fn finalize_xof(self) -> Self::Reader {
+        keccak_finalize(&mut self.keccak.s, self.keccak.pos, SHAKE256_RATE, 0x1F);
+        self.keccak.pos = SHAKE256_RATE;
+        SHAKE256Reader { shake: self }
+    }
+}
+
+impl SHAKE256 {
+    fn reset(&mut self) -> &mut Self {
+        keccak_init(&mut self.keccak.s);
+        self.keccak.pos = 0;
+        self
+    }
+}
+
+impl<'a> digest::XofReader for SHAKE256Reader<'a> {
+    fn read(&mut self, buffer: &mut [u8]) {
+        self.shake.keccak.pos = keccak_squeeze(
+            buffer,
+            &mut self.shake.keccak.s,
+            self.shake.keccak.pos,
+            SHAKE256_RATE,
+        );
+    }
+}
+
+impl<'a> Drop for SHAKE256Reader<'a> {
+    fn drop(&mut self) {
+        // Reset the writer such that it is ready for new input
+        self.shake.reset();
+    }
 }
 
 /*************************************************
@@ -543,7 +603,7 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
 //  *
 //  * Arguments:   - keccak_state *state: pointer to (uninitialized) Keccak state
 //  **************************************************/
-pub(crate) fn shake128_init(state: &mut keccak_state) {
+pub(crate) fn shake128_init(state: &mut KeccakState) {
     keccak_init(&mut state.s);
     state.pos = 0;
 }
@@ -563,7 +623,7 @@ pub(crate) fn shake128_init(state: &mut keccak_state) {
 //  *              - const uint8_t *in: pointer to input to be absorbed into s
 //  *              - size_t inlen: length of input in bytes
 //  **************************************************/
-pub(crate) fn shake128_absorb(state: &mut keccak_state, input: &[u8]) {
+pub(crate) fn shake128_absorb(state: &mut KeccakState, input: &[u8]) {
     state.pos = keccak_absorb(&mut state.s, state.pos, SHAKE128_RATE, input);
 }
 
@@ -579,7 +639,7 @@ pub(crate) fn shake128_absorb(state: &mut keccak_state, input: &[u8]) {
 //  *
 //  * Arguments:   - keccak_state *state: pointer to Keccak state
 //  **************************************************/
-pub(crate) fn shake128_finalize(state: &mut keccak_state) {
+pub(crate) fn shake128_finalize(state: &mut KeccakState) {
     keccak_finalize(&mut state.s, state.pos, SHAKE128_RATE, 0x1F);
     state.pos = SHAKE128_RATE;
 }
@@ -600,7 +660,7 @@ pub(crate) fn shake128_finalize(state: &mut keccak_state) {
 //  *              - size_t outlen : number of bytes to be squeezed (written to output)
 //  *              - keccak_state *s: pointer to input/output Keccak state
 //  **************************************************/
-pub(crate) fn shake128_squeeze(out: &mut [u8], state: &mut keccak_state) {
+pub(crate) fn shake128_squeeze(out: &mut [u8], state: &mut KeccakState) {
     state.pos = keccak_squeeze(out, &mut state.s, state.pos, SHAKE128_RATE);
 }
 //  void shake128_squeeze(uint8_t *out, size_t outlen, keccak_state *state)
@@ -638,77 +698,6 @@ pub(crate) fn shake128_squeeze(out: &mut [u8], state: &mut keccak_state) {
 //  void shake128_squeezeblocks(uint8_t *out, size_t nblocks, keccak_state *state)
 //  {
 //    keccak_squeezeblocks(out, nblocks, state->s, SHAKE128_RATE);
-//  }
-
-//  /*************************************************
-//  * Name:        shake256_init
-//  *
-//  * Description: Initilizes Keccak state for use as SHAKE256 XOF
-//  *
-//  * Arguments:   - keccak_state *state: pointer to (uninitialized) Keccak state
-//  **************************************************/
-pub(crate) fn shake256_init(state: &mut keccak_state) {
-    keccak_init(&mut state.s);
-    state.pos = 0;
-}
-//  void shake256_init(keccak_state *state)
-//  {
-//    keccak_init(state->s);
-//    state->pos = 0;
-//  }
-
-//  /*************************************************
-//  * Name:        shake256_absorb
-//  *
-//  * Description: Absorb step of the SHAKE256 XOF; incremental.
-//  *
-//  * Arguments:   - keccak_state *state: pointer to (initialized) output Keccak state
-//  *              - const uint8_t *in: pointer to input to be absorbed into s
-//  *              - size_t inlen: length of input in bytes
-//  **************************************************/
-pub(crate) fn shake256_absorb(state: &mut keccak_state, input: &[u8]) {
-    state.pos = keccak_absorb(&mut state.s, state.pos, SHAKE256_RATE, input);
-}
-
-//  void shake256_absorb(keccak_state *state, const uint8_t *in, size_t inlen)
-//  {
-//    state->pos = keccak_absorb(state->s, state->pos, SHAKE256_RATE, in, inlen);
-//  }
-
-//  /*************************************************
-//  * Name:        shake256_finalize
-//  *
-//  * Description: Finalize absorb step of the SHAKE256 XOF.
-//  *
-//  * Arguments:   - keccak_state *state: pointer to Keccak state
-//  **************************************************/
-pub(crate) fn shake256_finalize(state: &mut keccak_state) {
-    keccak_finalize(&mut state.s, state.pos, SHAKE256_RATE, 0x1F);
-    state.pos = SHAKE256_RATE;
-}
-//  void shake256_finalize(keccak_state *state)
-//  {
-//    keccak_finalize(state->s, state->pos, SHAKE256_RATE, 0x1F);
-//    state->pos = SHAKE256_RATE;
-//  }
-
-//  /*************************************************
-//  * Name:        shake256_squeeze
-//  *
-//  * Description: Squeeze step of SHAKE256 XOF. Squeezes arbitraily many
-//  *              bytes. Can be called multiple times to keep squeezing.
-//  *
-//  * Arguments:   - uint8_t *out: pointer to output blocks
-//  *              - size_t outlen : number of bytes to be squeezed (written to output)
-//  *              - keccak_state *s: pointer to input/output Keccak state
-//  **************************************************/
-pub(crate) fn shake256_squeeze(out: &mut [u8], state: &mut keccak_state) {
-    state.pos = keccak_squeeze(out, &mut state.s, state.pos, SHAKE256_RATE);
-}
-
-//  void shake256_squeeze(uint8_t *out, size_t outlen, keccak_state *state)
-//  {
-//    state->pos = keccak_squeeze(out, outlen, state->s, state->pos, SHAKE256_RATE);
 //  }
 
 //  /*************************************************
