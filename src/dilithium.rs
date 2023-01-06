@@ -1,5 +1,5 @@
 use crate::api;
-use crate::fips202::SHAKE256;
+use crate::fips202::{KeccakState, SHAKE256};
 use crate::{
     api::{Dilithium2, Dilithium3, Dilithium5, PublicKey, SecretKey, Signature},
     params::{DilithiumParams, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
@@ -41,7 +41,7 @@ struct KeygenMemoryPool<'a> {
     s2: &'a mut [poly],
     t0: &'a mut [poly],
     t1: &'a mut [poly],
-    xof: &'a mut SHAKE256,
+    keccak: &'a mut KeccakState,
 }
 
 #[inline]
@@ -53,13 +53,13 @@ pub fn dilithium2_keygen_from_seed(
     let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
 
-    let mut s1 = <[poly; P.l as usize]>::default();
-    let mut s1hat = <[poly; P.l as usize]>::default();
-    let mut s2 = <[poly; P.k as usize]>::default();
-    let mut t0 = <[poly; P.k as usize]>::default();
-    let mut t1 = <[poly; P.k as usize]>::default();
+    let mut s1 = <[poly; P.l]>::default();
+    let mut s1hat = <[poly; P.l]>::default();
+    let mut s2 = <[poly; P.k]>::default();
+    let mut t0 = <[poly; P.k]>::default();
+    let mut t1 = <[poly; P.k]>::default();
 
     let mem = KeygenMemoryPool {
         sk: &mut sk,
@@ -72,7 +72,7 @@ pub fn dilithium2_keygen_from_seed(
         s2: &mut s2,
         t0: &mut t0,
         t1: &mut t1,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
     dilithium_keygen_from_seed(&P, mem, seed)?;
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
@@ -86,13 +86,13 @@ pub fn dilithium3_keygen_from_seed(
     let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
 
-    let mut s1 = <[poly; P.l as usize]>::default();
-    let mut s1hat = <[poly; P.l as usize]>::default();
-    let mut s2 = <[poly; P.k as usize]>::default();
-    let mut t0 = <[poly; P.k as usize]>::default();
-    let mut t1 = <[poly; P.k as usize]>::default();
+    let mut s1 = <[poly; P.l]>::default();
+    let mut s1hat = <[poly; P.l]>::default();
+    let mut s2 = <[poly; P.k]>::default();
+    let mut t0 = <[poly; P.k]>::default();
+    let mut t1 = <[poly; P.k]>::default();
 
     let mem = KeygenMemoryPool {
         sk: &mut sk,
@@ -105,7 +105,7 @@ pub fn dilithium3_keygen_from_seed(
         s2: &mut s2,
         t0: &mut t0,
         t1: &mut t1,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
     dilithium_keygen_from_seed(&P, mem, seed)?;
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
@@ -119,12 +119,12 @@ pub fn dilithium5_keygen_from_seed(
     let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
-    let mut s1 = <[poly; P.l as usize]>::default();
-    let mut s1hat = <[poly; P.l as usize]>::default();
-    let mut s2 = <[poly; P.k as usize]>::default();
-    let mut t0 = <[poly; P.k as usize]>::default();
-    let mut t1 = <[poly; P.k as usize]>::default();
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
+    let mut s1 = <[poly; P.l]>::default();
+    let mut s1hat = <[poly; P.l]>::default();
+    let mut s2 = <[poly; P.k]>::default();
+    let mut t0 = <[poly; P.k]>::default();
+    let mut t1 = <[poly; P.k]>::default();
 
     let mem = KeygenMemoryPool {
         sk: &mut sk,
@@ -137,7 +137,7 @@ pub fn dilithium5_keygen_from_seed(
         s2: &mut s2,
         t0: &mut t0,
         t1: &mut t1,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
     dilithium_keygen_from_seed(&P, mem, seed)?;
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
@@ -160,8 +160,9 @@ fn dilithium_keygen_from_seed(
         let t1_ptr: *mut polyveck = core::mem::transmute(mem.t1.as_mut_ptr());
         let t0_ptr: *mut polyveck = core::mem::transmute(mem.t0.as_mut_ptr());
 
-        mem.xof.update(seed);
-        mem.xof.finalize_xof().read(mem.seedbuf);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(seed);
+        xof.finalize_xof().read(mem.seedbuf);
 
         let (rho, seedbuf) = mem.seedbuf.split_at_mut(SEEDBYTES);
         let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
@@ -169,14 +170,14 @@ fn dilithium_keygen_from_seed(
         debug_assert_eq!(seedbuf, &[]);
 
         // Expand matrix
-        v.polyvec_matrix_expand(mat_ptr, rho.as_ptr());
+        crate::expanda::polyvec_matrix_expand(p, mem.keccak, core::mem::transmute(mem.mat), rho);
 
         // Sample short vectors s1 and s2
         v.polyvecl_uniform_eta(s1_ptr, rhoprime.as_ptr(), 0);
-        v.polyveck_uniform_eta(s2_ptr, rhoprime.as_mut_ptr(), p.l);
+        v.polyveck_uniform_eta(s2_ptr, rhoprime.as_mut_ptr(), p.l as u16);
 
         // Matrix-vector multiplication
-        for idx in 0..p.L as usize {
+        for idx in 0..p.l {
             *(*s1hat_ptr).vec.get_unchecked_mut(idx) = mem.s1[idx];
         }
 
@@ -194,8 +195,9 @@ fn dilithium_keygen_from_seed(
         v.pack_pk(mem.pk.as_mut_ptr(), rho.as_ptr(), t1_ptr);
 
         // Compute H(rho, t1) and write secret key
-        mem.xof.update(mem.pk);
-        mem.xof.finalize_xof().read(mem.tr);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(mem.pk);
+        xof.finalize_xof().read(mem.tr);
 
         v.pack_sk(
             mem.sk.as_mut_ptr(),
@@ -224,7 +226,7 @@ struct SignMemoryPool<'a> {
     w0: &'a mut [poly],
     h: &'a mut [poly],
     cp: &'a mut poly,
-    xof: &'a mut crate::fips202::SHAKE256,
+    keccak: &'a mut crate::fips202::KeccakState,
 }
 
 pub fn dilithium2_signature(
@@ -235,15 +237,15 @@ pub fn dilithium2_signature(
     let v = P.variant;
     let mut sigbytes = [0; P.CRYPTO_BYTES as usize];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
-    let mut s1 = <[poly; P.l as usize]>::default();
-    let mut y = <[poly; P.l as usize]>::default();
-    let mut z = <[poly; P.l as usize]>::default();
-    let mut t0 = <[poly; P.k as usize]>::default();
-    let mut s2 = <[poly; P.k as usize]>::default();
-    let mut w1 = <[poly; P.k as usize]>::default();
-    let mut w0 = <[poly; P.k as usize]>::default();
-    let mut h = <[poly; P.k as usize]>::default();
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
+    let mut s1 = <[poly; P.l]>::default();
+    let mut y = <[poly; P.l]>::default();
+    let mut z = <[poly; P.l]>::default();
+    let mut t0 = <[poly; P.k]>::default();
+    let mut s2 = <[poly; P.k]>::default();
+    let mut w1 = <[poly; P.k]>::default();
+    let mut w0 = <[poly; P.k]>::default();
+    let mut h = <[poly; P.k]>::default();
     let mut cp = poly::default();
 
     let mem = SignMemoryPool {
@@ -259,7 +261,7 @@ pub fn dilithium2_signature(
         w0: &mut w0[..],
         h: &mut h[..],
         cp: &mut cp,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
     dilithium_signature(&P, mem, &sk.bytes, m)?;
     Ok(Signature { bytes: sigbytes })
@@ -272,16 +274,16 @@ pub fn dilithium3_signature(
     const P: DilithiumParams = DILITHIUM3;
     let mut sigbytes = [0; P.CRYPTO_BYTES as usize];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
 
-    let mut s1 = <[poly; P.l as usize]>::default();
-    let mut y = <[poly; P.l as usize]>::default();
-    let mut z = <[poly; P.l as usize]>::default();
-    let mut t0 = <[poly; P.k as usize]>::default();
-    let mut s2 = <[poly; P.k as usize]>::default();
-    let mut w1 = <[poly; P.k as usize]>::default();
-    let mut w0 = <[poly; P.k as usize]>::default();
-    let mut h = <[poly; P.k as usize]>::default();
+    let mut s1 = <[poly; P.l]>::default();
+    let mut y = <[poly; P.l]>::default();
+    let mut z = <[poly; P.l]>::default();
+    let mut t0 = <[poly; P.k]>::default();
+    let mut s2 = <[poly; P.k]>::default();
+    let mut w1 = <[poly; P.k]>::default();
+    let mut w0 = <[poly; P.k]>::default();
+    let mut h = <[poly; P.k]>::default();
     let mut cp = poly::default();
 
     let mem = SignMemoryPool {
@@ -297,7 +299,7 @@ pub fn dilithium3_signature(
         w0: &mut w0[..],
         h: &mut h[..],
         cp: &mut cp,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
 
     dilithium_signature(&P, mem, &sk.bytes, m)?;
@@ -311,15 +313,15 @@ pub fn dilithium5_signature(
     const P: DilithiumParams = DILITHIUM5;
     let mut sigbytes = [0; P.CRYPTO_BYTES as usize];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
-    let mut s1 = <[poly; P.l as usize]>::default();
-    let mut y = <[poly; P.l as usize]>::default();
-    let mut z = <[poly; P.l as usize]>::default();
-    let mut t0 = <[poly; P.k as usize]>::default();
-    let mut s2 = <[poly; P.k as usize]>::default();
-    let mut w1 = <[poly; P.k as usize]>::default();
-    let mut w0 = <[poly; P.k as usize]>::default();
-    let mut h = <[poly; P.k as usize]>::default();
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
+    let mut s1 = <[poly; P.l]>::default();
+    let mut y = <[poly; P.l]>::default();
+    let mut z = <[poly; P.l]>::default();
+    let mut t0 = <[poly; P.k]>::default();
+    let mut s2 = <[poly; P.k]>::default();
+    let mut w1 = <[poly; P.k]>::default();
+    let mut w0 = <[poly; P.k]>::default();
+    let mut h = <[poly; P.k]>::default();
     let mut cp = poly::default();
 
     let mem = SignMemoryPool {
@@ -335,7 +337,7 @@ pub fn dilithium5_signature(
         w0: &mut w0[..],
         h: &mut h[..],
         cp: &mut cp,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
 
     dilithium_signature(&P, mem, &sk.bytes, m)?;
@@ -380,17 +382,19 @@ fn dilithium_signature(
         );
 
         // Compute mu := CRH(tr || msg)
-        mem.xof.update(tr);
-        mem.xof.update(m);
-        mem.xof.finalize_xof().read(mu);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(tr);
+        xof.update(m);
+        xof.finalize_xof().read(mu);
 
         // Compute rhoprime := CRH(K || mu)
-        mem.xof.update(key);
-        mem.xof.update(mu);
-        mem.xof.finalize_xof().read(rhoprime);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(key);
+        xof.update(mu);
+        xof.finalize_xof().read(rhoprime);
 
         // Expand matrix and transform vectors
-        v.polyvec_matrix_expand(mat_ptr, rho.as_ptr());
+        crate::expanda::polyvec_matrix_expand(p, mem.keccak, core::mem::transmute(mem.mat), rho);
         v.polyvecl_ntt(s1_ptr);
         v.polyveck_ntt(s2_ptr);
         v.polyveck_ntt(t0_ptr);
@@ -407,7 +411,7 @@ fn dilithium_signature(
             nonce += 1;
 
             // Matrix-vector multiplication
-            for idx in 0..p.L as usize {
+            for idx in 0..p.l {
                 *(*z_ptr).vec.get_unchecked_mut(idx) = mem.y[idx];
             }
             v.polyvecl_ntt(z_ptr);
@@ -421,11 +425,12 @@ fn dilithium_signature(
             v.polyveck_pack_w1(mem.sigbytes.as_mut_ptr(), w1_ptr);
 
             // Compute challenge
-            mem.xof.update(mu);
-            let w1_packed = &mem.sigbytes[..p.k as usize * p.POLYW1_PACKEDBYTES as usize];
-            mem.xof.update(w1_packed);
+            let mut xof = SHAKE256::new(mem.keccak);
+            xof.update(mu);
+            let w1_packed = &mem.sigbytes[..p.k * p.POLYW1_PACKEDBYTES as usize];
+            xof.update(w1_packed);
             let ctilde = &mut mem.sigbytes[..SEEDBYTES];
-            mem.xof.finalize_xof().read(ctilde);
+            xof.finalize_xof().read(ctilde);
             v.poly_challenge(mem.cp, mem.sigbytes.as_ptr());
             v.poly_ntt(mem.cp);
 
@@ -487,7 +492,7 @@ struct VerifyMemoryPool<'a> {
     t1: &'a mut [poly],
     w1: &'a mut [poly],
     h: &'a mut [poly],
-    xof: &'a mut crate::fips202::SHAKE256,
+    keccak: &'a mut crate::fips202::KeccakState,
 }
 
 pub fn dilithium2_verify(
@@ -497,17 +502,17 @@ pub fn dilithium2_verify(
 ) -> Result<(), Error> {
     const di: DilithiumParams = DILITHIUM2;
 
-    let mut buf = [0; di.K as usize * di.POLYW1_PACKEDBYTES as usize];
+    let mut buf = [0; di.k * di.POLYW1_PACKEDBYTES as usize];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
     let mut cp = poly::default();
-    let mut mat: [poly; di.k as usize * di.l as usize] = unsafe { core::mem::zeroed() };
-    let mut z = <[poly; di.L as usize]>::default();
-    let mut t1 = <[poly; di.K as usize]>::default();
-    let mut w1 = <[poly; di.K as usize]>::default();
-    let mut h = <[poly; di.K as usize]>::default();
+    let mut mat: [poly; di.k * di.l] = unsafe { core::mem::zeroed() };
+    let mut z = <[poly; di.l]>::default();
+    let mut t1 = <[poly; di.k]>::default();
+    let mut w1 = <[poly; di.k]>::default();
+    let mut h = <[poly; di.k]>::default();
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -521,7 +526,7 @@ pub fn dilithium2_verify(
         t1: &mut t1,
         w1: &mut w1,
         h: &mut h,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
 
     dilithium_verify(&di, mem, &pk.bytes, m, &sig.bytes)
@@ -535,17 +540,17 @@ pub fn dilithium3_verify(
     const p: DilithiumParams = DILITHIUM3;
     let v = p.variant;
 
-    let mut buf = [0; p.K as usize * p.POLYW1_PACKEDBYTES as usize];
+    let mut buf = [0; p.k * p.POLYW1_PACKEDBYTES as usize];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
     let mut cp = poly::default();
-    let mut mat: [poly; p.k as usize * p.l as usize] = unsafe { core::mem::zeroed() };
-    let mut z = <[poly; p.L as usize]>::default();
-    let mut t1 = <[poly; p.K as usize]>::default();
-    let mut w1 = <[poly; p.K as usize]>::default();
-    let mut h = <[poly; p.K as usize]>::default();
+    let mut mat: [poly; p.k * p.l] = unsafe { core::mem::zeroed() };
+    let mut z = <[poly; p.l]>::default();
+    let mut t1 = <[poly; p.k]>::default();
+    let mut w1 = <[poly; p.k]>::default();
+    let mut h = <[poly; p.k]>::default();
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -559,7 +564,7 @@ pub fn dilithium3_verify(
         t1: &mut t1,
         w1: &mut w1,
         h: &mut h,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
 
     dilithium_verify(&p, mem, &pk.bytes, m, &sig.bytes)
@@ -572,17 +577,17 @@ pub fn dilithium5_verify(
 ) -> Result<(), Error> {
     const P: DilithiumParams = DILITHIUM5;
 
-    let mut buf = [0; P.K as usize * P.POLYW1_PACKEDBYTES as usize];
+    let mut buf = [0; P.k * P.POLYW1_PACKEDBYTES as usize];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
     let mut cp = poly::default();
-    let mut mat: [poly; P.k as usize * P.l as usize] = unsafe { core::mem::zeroed() };
-    let mut z = <[poly; P.L as usize]>::default();
-    let mut t1 = <[poly; P.K as usize]>::default();
-    let mut w1 = <[poly; P.K as usize]>::default();
-    let mut h = <[poly; P.K as usize]>::default();
+    let mut mat: [poly; P.k * P.l] = unsafe { core::mem::zeroed() };
+    let mut z = <[poly; P.l]>::default();
+    let mut t1 = <[poly; P.k]>::default();
+    let mut w1 = <[poly; P.k]>::default();
+    let mut h = <[poly; P.k]>::default();
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -596,7 +601,7 @@ pub fn dilithium5_verify(
         t1: &mut t1,
         w1: &mut w1,
         h: &mut h,
-        xof: &mut crate::fips202::SHAKE256::default(),
+        keccak: &mut crate::fips202::KeccakState::default(),
     };
 
     dilithium_verify(&P, mem, &pk.bytes, m, &sig.bytes)
@@ -631,19 +636,21 @@ fn dilithium_verify(
         }
 
         // Compute tr := H(pk)
-        mem.xof.update(pk_bytes);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(pk_bytes);
         let tr = &mut mem.mu[0..SEEDBYTES];
-        mem.xof.finalize_xof().read(tr);
+        xof.finalize_xof().read(tr);
 
         // Compute mu := CRH(tr, msg)
-        mem.xof.update(tr);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(tr);
         drop(tr);
-        mem.xof.update(m);
-        mem.xof.finalize_xof().read(mem.mu);
+        xof.update(m);
+        xof.finalize_xof().read(mem.mu);
 
         /* Matrix-vector multiplication; compute Az - c2^dt1 */
         v.poly_challenge(cp_ptr, c_ptr);
-        v.polyvec_matrix_expand(mat_ptr, rho_ptr);
+        crate::expanda::polyvec_matrix_expand(p, mem.keccak, core::mem::transmute(mem.mat), mem.rho);
 
         v.polyvecl_ntt(z_ptr);
         v.polyvec_matrix_pointwise_montgomery(w1_ptr, mat_ptr, z_ptr);
@@ -663,9 +670,10 @@ fn dilithium_verify(
         v.polyveck_pack_w1(buf_ptr, w1_ptr);
 
         // Call random oracle and verify challenge
-        mem.xof.update(mem.mu);
-        mem.xof.update(mem.buf);
-        mem.xof.finalize_xof().read(mem.c2);
+        let mut xof = SHAKE256::new(mem.keccak);
+        xof.update(mem.mu);
+        xof.update(mem.buf);
+        xof.finalize_xof().read(mem.c2);
         if mem.c == mem.c2 {
             return Ok(());
         }

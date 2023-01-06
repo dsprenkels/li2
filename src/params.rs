@@ -3,6 +3,7 @@ use core::{marker::PhantomData, mem::transmute};
 use crate::{api::DilithiumVariant, variants};
 use crystals_dilithium_sys::{dilithium2, dilithium3, dilithium5};
 
+pub(crate) const Q: u32 =  8380417;
 pub(crate) const N: usize = 256;
 pub(crate) const SEEDBYTES: usize = 32;
 pub(crate) const CRHBYTES: usize = 64;
@@ -27,12 +28,10 @@ impl DilithiumTypes for GenericTypes {
 
 pub(crate) struct DilithiumParams {
     // Basic parameters
-    pub(crate) k: u16,
-    pub(crate) l: u16,
+    pub(crate) k: usize,
+    pub(crate) l: usize,
     pub(crate) max_attempts: u16,
 
-    pub(crate) K: u32,
-    pub(crate) L: u32,
     pub(crate) ETA: u32,
     pub(crate) TAU: u32,
     pub(crate) BETA: u32,
@@ -59,8 +58,6 @@ pub(crate) const DILITHIUM2: DilithiumParams = DilithiumParams {
     l: 4,
     max_attempts: 331,
     
-    K: dilithium2::K,
-    L: dilithium2::L,
     ETA: dilithium2::ETA,
     TAU: dilithium2::TAU,
     BETA: dilithium2::BETA,
@@ -86,8 +83,6 @@ pub(crate) const DILITHIUM3: DilithiumParams = DilithiumParams {
     l: 5,
     max_attempts: 406,
 
-    K: dilithium3::K,
-    L: dilithium3::L,
     ETA: dilithium3::ETA,
     TAU: dilithium3::TAU,
     BETA: dilithium3::BETA,
@@ -114,8 +109,6 @@ pub(crate) const DILITHIUM5: DilithiumParams = DilithiumParams {
     l: 7,
     max_attempts: 295,
     
-    K: dilithium5::K,
-    L: dilithium5::L,
     ETA: dilithium5::ETA,
     TAU: dilithium5::TAU,
     BETA: dilithium5::BETA,
@@ -150,15 +143,23 @@ mod tests {
     fn test_dilithium2_params() {
         use refimpl::dilithium2::*;
 
-        assert_eq!(u32::from(DILITHIUM2.k), K);
-        assert_eq!(u32::from(DILITHIUM2.l), L);
+        assert_eq!(DILITHIUM2.k, K as usize);
+        assert_eq!(DILITHIUM2.l, L as usize);
     }
 
     #[test]
     fn test_dilithium3_params() {
         use refimpl::dilithium3::*;
 
-        assert_eq!(u32::from(DILITHIUM3.k), K);
-        assert_eq!(u32::from(DILITHIUM3.l), L);
+        assert_eq!(DILITHIUM3.k, K as usize);
+        assert_eq!(DILITHIUM3.l, L as usize);
+    }
+
+    #[test]
+    fn test_dilithium5_params() {
+        use refimpl::dilithium5::*;
+
+        assert_eq!(DILITHIUM5.k, K as usize);
+        assert_eq!(DILITHIUM5.l, L as usize);
     }
 }

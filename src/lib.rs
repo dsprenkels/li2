@@ -7,7 +7,7 @@
     trivial_numeric_casts,
     unused_qualifications
 )]
-#![no_std]
+// #![no_std]
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -29,5 +29,5 @@ mod dilithium;
 mod params;
 mod api;
 mod variants;
-
+mod expanda;
 mod fips202;

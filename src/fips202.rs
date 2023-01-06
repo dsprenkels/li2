@@ -16,41 +16,38 @@ pub(crate) struct KeccakState {
 }
 
 #[derive(Debug)]
-pub struct SHAKE256 {
-    keccak: KeccakState,
+pub struct SHAKE256<'a> {
+    keccak: &'a mut KeccakState,
 }
+
 #[derive(Debug)]
 pub struct SHAKE256Reader<'a> {
-    shake: &'a mut SHAKE256,
+    shake: SHAKE256<'a>,
 }
 
-impl Default for SHAKE256 {
-    fn default() -> Self {
-        let mut xof = SHAKE256 {
-            keccak: KeccakState::default(),
-        };
-        xof.reset();
-        xof
-    }
-}
-
-impl digest::Update for &mut SHAKE256 {
+impl<'a> digest::Update for SHAKE256<'a> {
     fn update(&mut self, data: &[u8]) {
         self.keccak.pos = keccak_absorb(&mut self.keccak.s, self.keccak.pos, SHAKE256_RATE, data);
     }
 }
 
-impl<'a> digest::ExtendableOutput for &'a mut SHAKE256 {
+impl<'a> digest::ExtendableOutput for SHAKE256<'a> {
     type Reader = SHAKE256Reader<'a>;
 
-    fn finalize_xof(self) -> Self::Reader {
+    fn finalize_xof(mut self) -> Self::Reader {
         keccak_finalize(&mut self.keccak.s, self.keccak.pos, SHAKE256_RATE, 0x1F);
         self.keccak.pos = SHAKE256_RATE;
         SHAKE256Reader { shake: self }
     }
 }
 
-impl SHAKE256 {
+impl<'a> SHAKE256<'a> {
+    pub(crate) fn new(keccak: &'a mut KeccakState) -> Self {
+        let mut xof = SHAKE256 { keccak };
+        xof.reset();
+        xof
+    }
+
     fn reset(&mut self) -> &mut Self {
         keccak_init(&mut self.keccak.s);
         self.keccak.pos = 0;
@@ -70,6 +67,64 @@ impl<'a> digest::XofReader for SHAKE256Reader<'a> {
 }
 
 impl<'a> Drop for SHAKE256Reader<'a> {
+    fn drop(&mut self) {
+        // Reset the writer such that it is ready for new input
+        self.shake.reset();
+    }
+}
+
+#[derive(Debug)]
+pub struct SHAKE128<'a> {
+    keccak: &'a mut KeccakState,
+}
+
+#[derive(Debug)]
+pub struct SHAKE128Reader<'a> {
+    shake: SHAKE128<'a>,
+}
+
+impl<'a> digest::Update for SHAKE128<'a> {
+    fn update(&mut self, data: &[u8]) {
+        self.keccak.pos = keccak_absorb(&mut self.keccak.s, self.keccak.pos, SHAKE128_RATE, data);
+    }
+}
+
+impl<'a> digest::ExtendableOutput for SHAKE128<'a> {
+    type Reader = SHAKE128Reader<'a>;
+
+    fn finalize_xof(mut self) -> Self::Reader {
+        keccak_finalize(&mut self.keccak.s, self.keccak.pos, SHAKE128_RATE, 0x1F);
+        self.keccak.pos = SHAKE128_RATE;
+        SHAKE128Reader { shake: self }
+    }
+}
+
+impl<'a> SHAKE128<'a> {
+    pub(crate) fn new(keccak: &'a mut KeccakState) -> Self {
+        let mut xof = Self { keccak };
+        xof.reset();
+        xof
+    }
+
+    fn reset(&mut self) -> &mut Self {
+        keccak_init(&mut self.keccak.s);
+        self.keccak.pos = 0;
+        self
+    }
+}
+
+impl<'a> digest::XofReader for SHAKE128Reader<'a> {
+    fn read(&mut self, buffer: &mut [u8]) {
+        self.shake.keccak.pos = keccak_squeeze(
+            buffer,
+            &mut self.shake.keccak.s,
+            self.shake.keccak.pos,
+            SHAKE128_RATE,
+        );
+    }
+}
+
+impl<'a> Drop for SHAKE128Reader<'a> {
     fn drop(&mut self) {
         // Reset the writer such that it is ready for new input
         self.shake.reset();
