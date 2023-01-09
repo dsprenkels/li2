@@ -173,12 +173,15 @@ fn dilithium_keygen_from_seed(
         crate::expanda::polyvec_matrix_expand(p, mem.keccak, core::mem::transmute(mem.mat), rho);
 
         // Sample short vectors s1 and s2
-        v.polyvecl_uniform_eta(s1_ptr, rhoprime.as_ptr(), 0);
-        v.polyveck_uniform_eta(s2_ptr, rhoprime.as_mut_ptr(), p.l as u16);
+        let mut nonce = 0;
+        let s1_mut: &mut [crate::Poly] = core::mem::transmute(mem.s1);
+        let s2_mut: &mut [crate::Poly] = core::mem::transmute(mem.s2);
+        nonce += crate::expands::polyvec_uniform_eta(p, mem.keccak, s1_mut, rhoprime, nonce);
+        crate::expands::polyvec_uniform_eta(p, mem.keccak, s2_mut, rhoprime, nonce);
 
         // Matrix-vector multiplication
         for idx in 0..p.l {
-            *(*s1hat_ptr).vec.get_unchecked_mut(idx) = mem.s1[idx];
+            *(*s1hat_ptr).vec.get_unchecked_mut(idx) = core::mem::transmute(s1_mut[idx]);
         }
 
         v.polyvecl_ntt(s1hat_ptr);

@@ -30,4 +30,11 @@ mod params;
 mod api;
 mod variants;
 mod expanda;
+mod expands;
 mod fips202;
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub(crate) struct Poly {
+    pub(crate) coeffs: [u32; 256],
+}
