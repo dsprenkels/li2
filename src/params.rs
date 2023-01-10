@@ -3,7 +3,7 @@ use core::{marker::PhantomData, mem::transmute};
 use crate::{api::DilithiumVariant, variants};
 use crystals_dilithium_sys::{dilithium2, dilithium3, dilithium5};
 
-pub(crate) const Q: u32 =  8380417;
+pub(crate) const Q: i32 =  8380417;
 pub(crate) const N: usize = 256;
 pub(crate) const SEEDBYTES: usize = 32;
 pub(crate) const CRHBYTES: usize = 64;

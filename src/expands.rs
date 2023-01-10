@@ -42,19 +42,19 @@ fn poly_uniform_eta(
         loop {
             let mut sample = [0; 1];
             xofread.read(&mut sample);
-            let mut t0 = u32::from(sample[0] & 0x0F);
+            let mut t0 = i32::from(sample[0] & 0x0F);
             if t0 < 15 {
-                t0 = t0.wrapping_sub((205u32.wrapping_mul(t0) >> 10).wrapping_mul(5));
-                *coeff = 2u32.wrapping_sub(t0);
+                t0 = t0.wrapping_sub((205i32.wrapping_mul(t0) >> 10).wrapping_mul(5));
+                *coeff = 2i32.wrapping_sub(t0);
                 coeff = match coeffs.next() {
                     Some(x) => x,
                     None => break,
                 };
             }
-            let mut t1 = u32::from(sample[0] >> 4);
+            let mut t1 = i32::from(sample[0] >> 4);
             if t1 < 15 {
-                t1 = t1.wrapping_sub((205u32.wrapping_mul(t1) >> 10).wrapping_mul(5));
-                *coeff = 2u32.wrapping_sub(t1);
+                t1 = t1.wrapping_sub((205i32.wrapping_mul(t1) >> 10).wrapping_mul(5));
+                *coeff = 2i32.wrapping_sub(t1);
                 coeff = match coeffs.next() {
                     Some(x) => x,
                     None => break,
@@ -65,17 +65,17 @@ fn poly_uniform_eta(
         loop {
             let mut sample = [0; 1];
             xofread.read(&mut sample);
-            let t0 = u32::from(sample[0] & 0x0F);
+            let t0 = i32::from(sample[0] & 0x0F);
             if t0 < 9 {
-                *coeff = 4u32.wrapping_sub(t0);
+                *coeff = 4i32.wrapping_sub(t0);
                 coeff = match coeffs.next() {
                     Some(x) => x,
                     None => break,
                 };
             }
-            let t1 = u32::from(sample[0] >> 4);
+            let t1 = i32::from(sample[0] >> 4);
             if t1 < 9 {
-                *coeff = 4u32.wrapping_sub(t1);
+                *coeff = 4i32.wrapping_sub(t1);
                 coeff = match coeffs.next() {
                     Some(x) => x,
                     None => break,

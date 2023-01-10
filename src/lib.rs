@@ -25,6 +25,8 @@ impl core::fmt::Display for Error {
     }
 }
 
+// TODO: Reorganize all of the modules
+
 mod dilithium;
 mod params;
 mod api;
@@ -32,9 +34,10 @@ mod variants;
 mod expanda;
 mod expands;
 mod fips202;
+mod ntt;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub(crate) struct Poly {
-    pub(crate) coeffs: [u32; 256],
+    pub(crate) coeffs: [i32; 256],
 }

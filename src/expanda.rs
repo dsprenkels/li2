@@ -33,7 +33,7 @@ fn poly_uniform(
         loop {
             let mut sample = [0; 4];
             xofread.read(&mut sample[0..3]);
-            let mut t = u32::from_le_bytes(sample);
+            let mut t = i32::from_le_bytes(sample);
             t &= 0x7FFFFF;
             if t < Q {
                 *coeff = t;
