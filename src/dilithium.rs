@@ -398,9 +398,9 @@ fn dilithium_signature(
 
         // Expand matrix and transform vectors
         crate::expanda::polyvec_matrix_expand(p, mem.keccak, core::mem::transmute(mem.mat), rho);
-        v.polyvecl_ntt(s1_ptr);
-        v.polyveck_ntt(s2_ptr);
-        v.polyveck_ntt(t0_ptr);
+        crate::ntt::polyvec_ntt(core::mem::transmute(mem.s1));
+        crate::ntt::polyvec_ntt(core::mem::transmute(mem.s2));
+        crate::ntt::polyvec_ntt(core::mem::transmute(mem.t0));
 
         let mut attempt = 0;
         'rej: loop {
@@ -417,10 +417,10 @@ fn dilithium_signature(
             for idx in 0..p.l {
                 *(*z_ptr).vec.get_unchecked_mut(idx) = mem.y[idx];
             }
-            v.polyvecl_ntt(z_ptr);
+            crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.z));
             v.polyvec_matrix_pointwise_montgomery(w1_ptr, mat_ptr, z_ptr);
             v.polyveck_reduce(w1_ptr);
-            v.polyveck_invntt_tomont(w1_ptr);
+            crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.w1));
 
             // Decompose w and call the random oracle
             v.polyveck_caddq(w1_ptr);
@@ -435,11 +435,11 @@ fn dilithium_signature(
             let ctilde = &mut mem.sigbytes[..SEEDBYTES];
             xof.finalize_xof().read(ctilde);
             v.poly_challenge(mem.cp, mem.sigbytes.as_ptr());
-            v.poly_ntt(mem.cp);
+            crate::ntt::poly_ntt(core::mem::transmute(&mut *mem.cp));
 
             // Compute z, reject if it reveals secret
             v.polyvecl_pointwise_poly_montgomery(z_ptr, mem.cp, s1_ptr);
-            v.polyvecl_invntt_tomont(z_ptr);
+            crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.z));
             v.polyvecl_add(z_ptr, z_ptr, y_ptr);
             v.polyvecl_reduce(z_ptr);
             if 0 != v.polyvecl_chknorm(z_ptr, (p.GAMMA1 - p.BETA) as i32) {
@@ -449,7 +449,7 @@ fn dilithium_signature(
             // Check that subtracting cs2 does not change high bits of w and
             // low bits do not reveal secret information
             v.polyveck_pointwise_poly_montgomery(h_ptr, mem.cp, s2_ptr);
-            v.polyveck_invntt_tomont(h_ptr);
+            crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.h));
             v.polyveck_sub(w0_ptr, w0_ptr, h_ptr);
             v.polyveck_reduce(w0_ptr);
             if 0 != v.polyveck_chknorm(w0_ptr, (p.GAMMA2 - p.BETA) as i32) {
@@ -458,7 +458,7 @@ fn dilithium_signature(
 
             // Compute hints for w1
             v.polyveck_pointwise_poly_montgomery(h_ptr, mem.cp, t0_ptr);
-            v.polyveck_invntt_tomont(h_ptr);
+            crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.h));
             v.polyveck_reduce(h_ptr);
             if 0 != v.polyveck_chknorm(h_ptr, p.GAMMA2 as i32) {
                 continue 'rej;

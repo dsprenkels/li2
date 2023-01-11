@@ -1,3 +1,8 @@
+use crystals_dilithium_sys::{
+    dilithium2::pqcrystals_dilithium2_ref_reduce32,
+    dilithium3::pqcrystals_dilithium3_ref_montgomery_reduce,
+};
+
 use crate::{
     params::{N, Q},
     Poly,
@@ -32,7 +37,7 @@ const fn modinverse(a: i64, m: i64) -> i64 {
 }
 
 const MONT_MOD: i64 = 1 << 32;
-const QINV: i32 = -modinverse(Q as i64, MONT_MOD) as i32;
+const Q_INV: i32 = modinverse(Q as i64, MONT_MOD) as i32;
 const MONT_R: i32 = (MONT_MOD % Q as i64) as i32;
 // TODO: ||R - Q|| is smaller than ||R||.  Replace?
 const PSI: i32 = 1753;
@@ -65,6 +70,81 @@ const ZETAS: [i32; N] = {
     }
     zetas
 };
+
+fn montgomery_reduce(a: i64) -> i32 {
+    const Q_I64: i64 = Q as i64;
+    const QINV_I64: i64 = Q_INV as i64;
+    let t: i32 = ((a as i32 as i64).wrapping_mul(QINV_I64)) as i32;
+    let t: i64 = a.wrapping_sub((t as i64).wrapping_mul(Q_I64)) >> 32;
+    t as i32
+}
+
+pub(crate) fn poly_ntt(p: &mut Poly) {
+    // TODO: Oxidize this function
+
+    let mut k = 0;
+    let mut len = 0x80;
+    while len > 0 {
+        let mut j;
+        let mut start = 0;
+        while start < N {
+            k += 1;
+            let zeta = ZETAS[k] as i64;
+            j = start;
+            while j < start + len {
+                let t = montgomery_reduce(zeta.wrapping_mul(p.coeffs[j + len] as i64));
+                p.coeffs[j + len] = p.coeffs[j].wrapping_sub(t);
+                p.coeffs[j] = p.coeffs[j].wrapping_add(t);
+                j += 1;
+            }
+            start = j + len;
+        }
+        len >>= 1;
+    }
+}
+
+pub(crate) fn poly_invntt_tomont(p: &mut Poly) {
+    // TODO: Oxidize this function
+
+    const MONT_R_I64: i64 = MONT_R as i64;
+    const N_INV: i64 = modinverse(N as i64, Q as i64);
+    const F: i64 = cmod(MONT_R_I64 * MONT_R_I64 * N_INV, Q as i64);
+    let mut k = 256;
+    let mut len = 1;
+    while len < N {
+        let mut j;
+        let mut start = 0;
+        while start < N {
+            k -= 1;
+            let zeta = -ZETAS[k] as i64;
+            j = start;
+            while j < start + len {
+                let t = p.coeffs[j];
+                p.coeffs[j] = t.wrapping_add(p.coeffs[j + len]);
+                let t = t.wrapping_sub(p.coeffs[j + len]);
+                p.coeffs[j + len] = montgomery_reduce(i64::from(t).wrapping_mul(zeta));
+                j += 1;
+            }
+            start = j + len;
+        }
+        len <<= 1;
+    }
+    for coeff in p.coeffs.iter_mut() {
+        *coeff = montgomery_reduce(F.wrapping_mul(i64::from(*coeff)));
+    }
+}
+
+pub(crate) fn polyvec_ntt(vec: &mut [Poly]) {
+    for poly in vec.iter_mut() {
+        poly_ntt(poly)
+    }
+}
+
+pub(crate) fn polyvec_invntt_tomont(vec: &mut [Poly]) {
+    for poly in vec.iter_mut() {
+        poly_invntt_tomont(poly)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -104,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_zetas() {
-        assert_eq!(cmod(QINV as i64, MONT_MOD), cmod(4236238847, MONT_MOD));
+        assert_eq!(Q_INV, 58728449);
         assert_eq!(MONT_R, 4193792);
         assert_eq!(&ZETAS[..], &ZETAS_REF[..]);
     }
