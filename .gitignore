@@ -2,3 +2,4 @@
 /Cargo.lock
 
 .gdb_history
+.vscode/
