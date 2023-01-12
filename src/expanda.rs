@@ -1,7 +1,7 @@
 use digest::{ExtendableOutput, Update, XofReader};
 
 use crate::{
-    Poly,
+    poly::Poly,
     fips202::{KeccakState, SHAKE128},
     params::{DilithiumParams, N, Q},
 };

@@ -3,7 +3,7 @@ use digest::{ExtendableOutput, Update, XofReader};
 use crate::{
     fips202,
     params::{DilithiumParams, CRHBYTES},
-    Poly,
+    poly::Poly,
 };
 
 pub(crate) fn polyvec_uniform_eta(

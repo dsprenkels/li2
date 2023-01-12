@@ -9,6 +9,8 @@
 )]
 // #![no_std]
 
+use params::N;
+
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Error {
@@ -26,18 +28,13 @@ impl core::fmt::Display for Error {
 }
 
 // TODO: Reorganize all of the modules
-
-mod dilithium;
-mod params;
 mod api;
-mod variants;
+mod dilithium;
 mod expanda;
 mod expands;
 mod fips202;
 mod ntt;
-
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub(crate) struct Poly {
-    pub(crate) coeffs: [i32; 256],
-}
+mod params;
+mod poly;
+mod reduce;
+mod variants;
