@@ -7,13 +7,11 @@
     trivial_numeric_casts,
     unused_qualifications
 )]
-// #![no_std]
-
-use params::N;
+#![no_std]
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum Error {
+pub(crate) enum Error {
     InternalError,
     InvalidSignature,
 }
@@ -28,13 +26,13 @@ impl core::fmt::Display for Error {
 }
 
 // TODO: Reorganize all of the modules
-mod api;
-mod dilithium;
-mod expanda;
-mod expands;
-mod fips202;
-mod ntt;
-mod params;
-mod poly;
-mod reduce;
-mod variants;
+// mod api;
+// mod dilithium;
+// mod expanda;
+// mod expands;
+// mod fips202;
+// mod ntt;
+// mod params;
+// mod poly;
+// mod reduce;
+// mod variants;
