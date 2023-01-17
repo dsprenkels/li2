@@ -93,11 +93,11 @@ pub(crate) trait DilithiumVariant {
     ) -> ::core::ffi::c_int;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Dilithium2;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Dilithium3;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Dilithium5;
 
 impl DilithiumVariant for Dilithium2 {

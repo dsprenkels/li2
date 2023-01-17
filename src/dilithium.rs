@@ -47,7 +47,7 @@ struct KeygenMemoryPool<'a> {
 }
 
 #[inline]
-pub fn dilithium2_keygen_from_seed(
+fn dilithium2_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(api::SecretKey<Dilithium2>, api::PublicKey<Dilithium2>), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
@@ -79,7 +79,7 @@ pub fn dilithium2_keygen_from_seed(
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
 }
 
-pub fn dilithium3_keygen_from_seed(
+fn dilithium3_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(SecretKey<Dilithium3>, PublicKey<Dilithium3>), Error> {
     const P: DilithiumParams = DILITHIUM3;
@@ -111,7 +111,7 @@ pub fn dilithium3_keygen_from_seed(
     Ok((SecretKey { bytes: sk }, PublicKey { bytes: pk }))
 }
 
-pub fn dilithium5_keygen_from_seed(
+fn dilithium5_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(SecretKey<Dilithium5>, PublicKey<Dilithium5>), Error> {
     const P: DilithiumParams = DILITHIUM5;
@@ -202,13 +202,19 @@ fn dilithium_keygen_from_seed(
 
         // Extract t1 and write public key
         crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.t1), crate::reduce::caddq);
-        v.polyveck_power2round(t1_ptr, t0_ptr, t1_ptr);
+        for (t0_elem, t1_elem) in mem.t0.iter_mut().zip(mem.t1.iter_mut()) {
+            for (t0_coeff, t1_coeff) in t0_elem.coeffs.iter_mut().zip(t1_elem.coeffs.iter_mut()) {
+                (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t0_coeff, *t1_coeff);
+            }
+        }
         v.pack_pk(mem.pk.as_mut_ptr(), rho.as_ptr(), t1_ptr);
 
         // Compute H(rho, t1) and write secret key
         let mut xof = SHAKE256::new(mem.keccak);
         xof.update(mem.pk);
         xof.finalize_xof().read(mem.tr);
+
+        crate::packing::pack_sk(p, mem.sk, rho, mem.tr, key, core::mem::transmute(mem.t0), core::mem::transmute(mem.s1), core::mem::transmute(mem.s2));
 
         v.pack_sk(
             mem.sk.as_mut_ptr(),
@@ -240,7 +246,7 @@ struct SignMemoryPool<'a> {
     keccak: &'a mut crate::fips202::KeccakState,
 }
 
-pub fn dilithium2_signature(
+fn dilithium2_signature(
     sk: &SecretKey<Dilithium2>,
     m: &[u8],
 ) -> Result<Signature<Dilithium2>, Error> {
@@ -278,7 +284,7 @@ pub fn dilithium2_signature(
     Ok(Signature { bytes: sigbytes })
 }
 
-pub fn dilithium3_signature(
+fn dilithium3_signature(
     sk: &SecretKey<Dilithium3>,
     m: &[u8],
 ) -> Result<Signature<Dilithium3>, Error> {
@@ -317,7 +323,7 @@ pub fn dilithium3_signature(
     Ok(Signature { bytes: sigbytes })
 }
 
-pub fn dilithium5_signature(
+fn dilithium5_signature(
     sk: &SecretKey<Dilithium5>,
     m: &[u8],
 ) -> Result<Signature<Dilithium5>, Error> {
@@ -514,7 +520,7 @@ struct VerifyMemoryPool<'a> {
     keccak: &'a mut crate::fips202::KeccakState,
 }
 
-pub fn dilithium2_verify(
+fn dilithium2_verify(
     pk: &PublicKey<Dilithium2>,
     m: &[u8],
     sig: &Signature<Dilithium2>,
@@ -551,7 +557,7 @@ pub fn dilithium2_verify(
     dilithium_verify(&p, mem, &pk.bytes, m, &sig.bytes)
 }
 
-pub fn dilithium3_verify(
+fn dilithium3_verify(
     pk: &PublicKey<Dilithium3>,
     m: &[u8],
     sig: &Signature<Dilithium3>,
@@ -589,7 +595,7 @@ pub fn dilithium3_verify(
     dilithium_verify(&p, mem, &pk.bytes, m, &sig.bytes)
 }
 
-pub fn dilithium5_verify(
+fn dilithium5_verify(
     pk: &PublicKey<Dilithium5>,
     m: &[u8],
     sig: &Signature<Dilithium5>,

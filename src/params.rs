@@ -3,8 +3,10 @@ use core::{marker::PhantomData, mem::transmute};
 use crate::{api::DilithiumVariant, variants};
 use crystals_dilithium_sys::{dilithium2, dilithium3, dilithium5};
 
-pub(crate) const Q: i32 =  8380417;
+pub(crate) const Q: i32 = 8380417;
 pub(crate) const N: usize = 256;
+pub(crate) const D: u32 = 13;
+
 pub(crate) const SEEDBYTES: usize = 32;
 pub(crate) const CRHBYTES: usize = 64;
 
@@ -32,24 +34,23 @@ pub(crate) struct DilithiumParams {
     pub(crate) l: usize,
     pub(crate) max_attempts: u16,
 
-    pub(crate) ETA: u32,
+    pub(crate) ETA: i32,
     pub(crate) TAU: u32,
     pub(crate) BETA: u32,
     pub(crate) GAMMA1: u32,
     pub(crate) GAMMA2: u32,
     pub(crate) OMEGA: u32,
-    pub(crate) POLYT1_PACKEDBYTES: u32,
-    pub(crate) POLYT0_PACKEDBYTES: u32,
-    pub(crate) POLYVECH_PACKEDBYTES: u32,
-    pub(crate) POLYZ_PACKEDBYTES: u32,
-    pub(crate) POLYW1_PACKEDBYTES: u32,
-    pub(crate) POLYETA_PACKEDBYTES: u32,
-    pub(crate) CRYPTO_PUBLICKEYBYTES: u32,
-    pub(crate) CRYPTO_SECRETKEYBYTES: u32,
-    pub(crate) CRYPTO_BYTES: u32,
+    pub(crate) POLYT1_PACKEDBYTES: usize,
+    pub(crate) POLYT0_PACKEDBYTES: usize,
+    pub(crate) POLYVECH_PACKEDBYTES: usize,
+    pub(crate) POLYZ_PACKEDBYTES: usize,
+    pub(crate) POLYW1_PACKEDBYTES: usize,
+    pub(crate) POLYETA_PACKEDBYTES: usize,
+    pub(crate) CRYPTO_PUBLICKEYBYTES: usize,
+    pub(crate) CRYPTO_SECRETKEYBYTES: usize,
+    pub(crate) CRYPTO_BYTES: usize,
 
     pub(crate) variant: &'static dyn variants::DilithiumVariant,
-
 }
 
 #[allow(non_snake_case)]
@@ -57,22 +58,22 @@ pub(crate) const DILITHIUM2: DilithiumParams = DilithiumParams {
     k: 4,
     l: 4,
     max_attempts: 331,
-    
-    ETA: dilithium2::ETA,
+
+    ETA: dilithium2::ETA as i32,
     TAU: dilithium2::TAU,
     BETA: dilithium2::BETA,
     GAMMA1: dilithium2::GAMMA1,
     GAMMA2: dilithium2::GAMMA2,
     OMEGA: dilithium2::OMEGA,
-    POLYT1_PACKEDBYTES: dilithium2::POLYT1_PACKEDBYTES,
-    POLYT0_PACKEDBYTES: dilithium2::POLYT0_PACKEDBYTES,
-    POLYVECH_PACKEDBYTES: dilithium2::POLYVECH_PACKEDBYTES,
-    POLYZ_PACKEDBYTES: dilithium2::POLYZ_PACKEDBYTES,
-    POLYW1_PACKEDBYTES: dilithium2::POLYW1_PACKEDBYTES,
-    POLYETA_PACKEDBYTES: dilithium2::POLYETA_PACKEDBYTES,
-    CRYPTO_PUBLICKEYBYTES: dilithium2::CRYPTO_PUBLICKEYBYTES,
-    CRYPTO_SECRETKEYBYTES: dilithium2::CRYPTO_SECRETKEYBYTES,
-    CRYPTO_BYTES: dilithium2::CRYPTO_BYTES,
+    POLYT1_PACKEDBYTES: dilithium2::POLYT1_PACKEDBYTES as usize,
+    POLYT0_PACKEDBYTES: dilithium2::POLYT0_PACKEDBYTES as usize,
+    POLYVECH_PACKEDBYTES: dilithium2::POLYVECH_PACKEDBYTES as usize,
+    POLYZ_PACKEDBYTES: dilithium2::POLYZ_PACKEDBYTES as usize,
+    POLYW1_PACKEDBYTES: dilithium2::POLYW1_PACKEDBYTES as usize,
+    POLYETA_PACKEDBYTES: dilithium2::POLYETA_PACKEDBYTES as usize,
+    CRYPTO_PUBLICKEYBYTES: dilithium2::CRYPTO_PUBLICKEYBYTES as usize,
+    CRYPTO_SECRETKEYBYTES: dilithium2::CRYPTO_SECRETKEYBYTES as usize,
+    CRYPTO_BYTES: dilithium2::CRYPTO_BYTES as usize,
 
     variant: &variants::Dilithium2,
 };
@@ -83,47 +84,46 @@ pub(crate) const DILITHIUM3: DilithiumParams = DilithiumParams {
     l: 5,
     max_attempts: 406,
 
-    ETA: dilithium3::ETA,
+    ETA: dilithium3::ETA as i32,
     TAU: dilithium3::TAU,
     BETA: dilithium3::BETA,
     GAMMA1: dilithium3::GAMMA1,
     GAMMA2: dilithium3::GAMMA2,
     OMEGA: dilithium3::OMEGA,
-    POLYT1_PACKEDBYTES: dilithium3::POLYT1_PACKEDBYTES,
-    POLYT0_PACKEDBYTES: dilithium3::POLYT0_PACKEDBYTES,
-    POLYVECH_PACKEDBYTES: dilithium3::POLYVECH_PACKEDBYTES,
-    POLYZ_PACKEDBYTES: dilithium3::POLYZ_PACKEDBYTES,
-    POLYW1_PACKEDBYTES: dilithium3::POLYW1_PACKEDBYTES,
-    POLYETA_PACKEDBYTES: dilithium3::POLYETA_PACKEDBYTES,
-    CRYPTO_PUBLICKEYBYTES: dilithium3::CRYPTO_PUBLICKEYBYTES,
-    CRYPTO_SECRETKEYBYTES: dilithium3::CRYPTO_SECRETKEYBYTES,
-    CRYPTO_BYTES: dilithium3::CRYPTO_BYTES,
+    POLYT1_PACKEDBYTES: dilithium3::POLYT1_PACKEDBYTES as usize,
+    POLYT0_PACKEDBYTES: dilithium3::POLYT0_PACKEDBYTES as usize,
+    POLYVECH_PACKEDBYTES: dilithium3::POLYVECH_PACKEDBYTES as usize,
+    POLYZ_PACKEDBYTES: dilithium3::POLYZ_PACKEDBYTES as usize,
+    POLYW1_PACKEDBYTES: dilithium3::POLYW1_PACKEDBYTES as usize,
+    POLYETA_PACKEDBYTES: dilithium3::POLYETA_PACKEDBYTES as usize,
+    CRYPTO_PUBLICKEYBYTES: dilithium3::CRYPTO_PUBLICKEYBYTES as usize,
+    CRYPTO_SECRETKEYBYTES: dilithium3::CRYPTO_SECRETKEYBYTES as usize,
+    CRYPTO_BYTES: dilithium3::CRYPTO_BYTES as usize,
 
     variant: &variants::Dilithium3,
 };
-
 
 #[allow(non_snake_case)]
 pub(crate) const DILITHIUM5: DilithiumParams = DilithiumParams {
     k: 8,
     l: 7,
     max_attempts: 295,
-    
-    ETA: dilithium5::ETA,
+
+    ETA: dilithium5::ETA as i32,
     TAU: dilithium5::TAU,
     BETA: dilithium5::BETA,
     GAMMA1: dilithium5::GAMMA1,
     GAMMA2: dilithium5::GAMMA2,
     OMEGA: dilithium5::OMEGA,
-    POLYT1_PACKEDBYTES: dilithium5::POLYT1_PACKEDBYTES,
-    POLYT0_PACKEDBYTES: dilithium5::POLYT0_PACKEDBYTES,
-    POLYVECH_PACKEDBYTES: dilithium5::POLYVECH_PACKEDBYTES,
-    POLYZ_PACKEDBYTES: dilithium5::POLYZ_PACKEDBYTES,
-    POLYW1_PACKEDBYTES: dilithium5::POLYW1_PACKEDBYTES,
-    POLYETA_PACKEDBYTES: dilithium5::POLYETA_PACKEDBYTES,
-    CRYPTO_PUBLICKEYBYTES: dilithium5::CRYPTO_PUBLICKEYBYTES,
-    CRYPTO_SECRETKEYBYTES: dilithium5::CRYPTO_SECRETKEYBYTES,
-    CRYPTO_BYTES: dilithium5::CRYPTO_BYTES,
+    POLYT1_PACKEDBYTES: dilithium5::POLYT1_PACKEDBYTES as usize,
+    POLYT0_PACKEDBYTES: dilithium5::POLYT0_PACKEDBYTES as usize,
+    POLYVECH_PACKEDBYTES: dilithium5::POLYVECH_PACKEDBYTES as usize,
+    POLYZ_PACKEDBYTES: dilithium5::POLYZ_PACKEDBYTES as usize,
+    POLYW1_PACKEDBYTES: dilithium5::POLYW1_PACKEDBYTES as usize,
+    POLYETA_PACKEDBYTES: dilithium5::POLYETA_PACKEDBYTES as usize,
+    CRYPTO_PUBLICKEYBYTES: dilithium5::CRYPTO_PUBLICKEYBYTES as usize,
+    CRYPTO_SECRETKEYBYTES: dilithium5::CRYPTO_SECRETKEYBYTES as usize,
+    CRYPTO_BYTES: dilithium5::CRYPTO_BYTES as usize,
 
     variant: &variants::Dilithium5,
 };

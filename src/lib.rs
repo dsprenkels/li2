@@ -26,13 +26,15 @@ impl core::fmt::Display for Error {
 }
 
 // TODO: Reorganize all of the modules
-// mod api;
-// mod dilithium;
-// mod expanda;
-// mod expands;
-// mod fips202;
-// mod ntt;
-// mod params;
-// mod poly;
-// mod reduce;
-// mod variants;
+mod api;
+mod dilithium;
+mod expanda;
+mod expands;
+mod fips202;
+mod ntt;
+mod packing;
+mod params;
+mod poly;
+mod reduce;
+mod rounding;
+mod variants;
