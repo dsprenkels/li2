@@ -145,21 +145,12 @@ fn dilithium5_keygen_from_seed(
 
 fn dilithium_keygen_from_seed(
     p: &'static DilithiumParams,
-    mut mem: KeygenMemoryPool<'_>,
+    mem: KeygenMemoryPool<'_>,
     seed: &[u8],
 ) -> Result<(), Error> {
-    let v = p.variant;
-
     debug_assert_eq!(seed.len(), SEEDBYTES);
 
     unsafe {
-        let mat_ptr: *mut polyvecl = core::mem::transmute(mem.mat.as_mut_ptr());
-        let s1_ptr: *mut polyvecl = core::mem::transmute(mem.s1.as_mut_ptr());
-        let s1hat_ptr: *mut polyvecl = core::mem::transmute(mem.s1hat.as_mut_ptr());
-        let s2_ptr: *mut polyveck = core::mem::transmute(mem.s2.as_mut_ptr());
-        let t1_ptr: *mut polyveck = core::mem::transmute(mem.t1.as_mut_ptr());
-        let t0_ptr: *mut polyveck = core::mem::transmute(mem.t0.as_mut_ptr());
-
         let mut xof = SHAKE256::new(mem.keccak);
         xof.update(seed);
         xof.finalize_xof().read(mem.seedbuf);
@@ -180,10 +171,7 @@ fn dilithium_keygen_from_seed(
         crate::expands::polyvec_uniform_eta(p, mem.keccak, s2_mut, rhoprime, nonce);
 
         // Matrix-vector multiplication
-        for idx in 0..p.l {
-            *(*s1hat_ptr).vec.get_unchecked_mut(idx) = core::mem::transmute(s1_mut[idx]);
-        }
-
+        mem.s1hat.copy_from_slice(&mem.s1);
         crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.s1hat));
         crate::poly::polyvec_matrix_pointwise_montgomery(
             p,
@@ -207,7 +195,7 @@ fn dilithium_keygen_from_seed(
                 (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t0_coeff, *t1_coeff);
             }
         }
-        v.pack_pk(mem.pk.as_mut_ptr(), rho.as_ptr(), t1_ptr);
+        crate::packing::pack_pk(p, mem.pk, rho, core::mem::transmute(mem.t1));
 
         // Compute H(rho, t1) and write secret key
         let mut xof = SHAKE256::new(mem.keccak);
@@ -215,16 +203,6 @@ fn dilithium_keygen_from_seed(
         xof.finalize_xof().read(mem.tr);
 
         crate::packing::pack_sk(p, mem.sk, rho, mem.tr, key, core::mem::transmute(mem.t0), core::mem::transmute(mem.s1), core::mem::transmute(mem.s2));
-
-        v.pack_sk(
-            mem.sk.as_mut_ptr(),
-            rho.as_ptr(),
-            mem.tr.as_ptr(),
-            key.as_ptr(),
-            t0_ptr,
-            s1_ptr,
-            s2_ptr,
-        );
     }
     Ok(())
 }
