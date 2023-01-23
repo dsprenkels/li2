@@ -1,7 +1,5 @@
 use crate::api;
 use crate::fips202::{KeccakState, SHAKE256};
-use crate::ntt::polyvec_invntt_tomont;
-use crate::poly::polyvec_pointwise;
 use crate::{
     api::{Dilithium2, Dilithium3, Dilithium5, PublicKey, SecretKey, Signature},
     params::{DilithiumParams, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
@@ -38,11 +36,11 @@ struct KeygenMemoryPool<'a> {
     seedbuf: &'a mut [u8; 2 * SEEDBYTES + CRHBYTES],
     tr: &'a mut [u8; SEEDBYTES],
     mat: &'a mut [crate::poly::Poly],
-    s1: &'a mut [poly],
-    s1hat: &'a mut [poly],
-    s2: &'a mut [poly],
-    t0: &'a mut [poly],
-    t1: &'a mut [poly],
+    s1: &'a mut [crate::poly::Poly],
+    s1hat: &'a mut [crate::poly::Poly],
+    s2: &'a mut [crate::poly::Poly],
+    t0: &'a mut [crate::poly::Poly],
+    t1: &'a mut [crate::poly::Poly],
     keccak: &'a mut KeccakState,
 }
 
@@ -51,16 +49,16 @@ fn dilithium2_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(api::SecretKey<Dilithium2>, api::PublicKey<Dilithium2>), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
-    let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES as usize];
-    let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
+    let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES];
+    let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
-    let mut s1 = <[poly; P.l]>::default();
-    let mut s1hat = <[poly; P.l]>::default();
-    let mut s2 = <[poly; P.k]>::default();
-    let mut t0 = <[poly; P.k]>::default();
-    let mut t1 = <[poly; P.k]>::default();
+    let mut mat = [crate::poly::Poly::zero(); P.k * P.l];
+    let mut s1 = [crate::poly::Poly::zero(); P.l];
+    let mut s1hat = [crate::poly::Poly::zero(); P.l];
+    let mut s2 = [crate::poly::Poly::zero(); P.k];
+    let mut t0 = [crate::poly::Poly::zero(); P.k];
+    let mut t1 = [crate::poly::Poly::zero(); P.k];
 
     let mem = KeygenMemoryPool {
         sk: &mut sk,
@@ -83,16 +81,16 @@ fn dilithium3_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(SecretKey<Dilithium3>, PublicKey<Dilithium3>), Error> {
     const P: DilithiumParams = DILITHIUM3;
-    let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES as usize];
-    let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
+    let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES];
+    let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
-    let mut s1 = <[poly; P.l]>::default();
-    let mut s1hat = <[poly; P.l]>::default();
-    let mut s2 = <[poly; P.k]>::default();
-    let mut t0 = <[poly; P.k]>::default();
-    let mut t1 = <[poly; P.k]>::default();
+    let mut mat = [crate::poly::Poly::zero(); P.k * P.l];
+    let mut s1 = [crate::poly::Poly::zero(); P.l];
+    let mut s1hat = [crate::poly::Poly::zero(); P.l];
+    let mut s2 = [crate::poly::Poly::zero(); P.k];
+    let mut t0 = [crate::poly::Poly::zero(); P.k];
+    let mut t1 = [crate::poly::Poly::zero(); P.k];
 
     let mem = KeygenMemoryPool {
         sk: &mut sk,
@@ -115,16 +113,16 @@ fn dilithium5_keygen_from_seed(
     seed: &[u8],
 ) -> Result<(SecretKey<Dilithium5>, PublicKey<Dilithium5>), Error> {
     const P: DilithiumParams = DILITHIUM5;
-    let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES as usize];
-    let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES as usize];
+    let mut sk = [0u8; P.CRYPTO_SECRETKEYBYTES];
+    let mut pk = [0u8; P.CRYPTO_PUBLICKEYBYTES];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
-    let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
-    let mut s1 = <[poly; P.l]>::default();
-    let mut s1hat = <[poly; P.l]>::default();
-    let mut s2 = <[poly; P.k]>::default();
-    let mut t0 = <[poly; P.k]>::default();
-    let mut t1 = <[poly; P.k]>::default();
+    let mut mat = [crate::poly::Poly::zero(); P.k * P.l];
+    let mut s1 = [crate::poly::Poly::zero(); P.l];
+    let mut s1hat = [crate::poly::Poly::zero(); P.l];
+    let mut s2 = [crate::poly::Poly::zero(); P.k];
+    let mut t0 = [crate::poly::Poly::zero(); P.k];
+    let mut t1 = [crate::poly::Poly::zero(); P.k];
 
     let mem = KeygenMemoryPool {
         sk: &mut sk,
@@ -150,64 +148,53 @@ fn dilithium_keygen_from_seed(
 ) -> Result<(), Error> {
     debug_assert_eq!(seed.len(), SEEDBYTES);
 
-    unsafe {
-        let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(seed);
-        xof.finalize_xof().read(mem.seedbuf);
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(seed);
+    xof.finalize_xof().read(mem.seedbuf);
 
-        let (rho, seedbuf) = mem.seedbuf.split_at_mut(SEEDBYTES);
-        let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
-        let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-        debug_assert_eq!(seedbuf, &[]);
+    let (rho, seedbuf) = mem.seedbuf.split_at_mut(SEEDBYTES);
+    let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
+    let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
+    debug_assert_eq!(seedbuf, &[]);
 
-        // Expand matrix
-        crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, rho);
+    // Expand matrix
+    crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, rho);
 
-        // Sample short vectors s1 and s2
-        let mut nonce = 0;
-        let s1_mut: &mut [crate::poly::Poly] = core::mem::transmute(&mut *mem.s1);
-        let s2_mut: &mut [crate::poly::Poly] = core::mem::transmute(&mut *mem.s2);
-        nonce += crate::expands::polyvec_uniform_eta(p, mem.keccak, s1_mut, rhoprime, nonce);
-        crate::expands::polyvec_uniform_eta(p, mem.keccak, s2_mut, rhoprime, nonce);
+    // Sample short vectors s1 and s2
+    let mut nonce = 0;
+    let s1_mut: &mut [crate::poly::Poly] = &mut *mem.s1;
+    let s2_mut: &mut [crate::poly::Poly] = &mut *mem.s2;
+    nonce += crate::expands::polyvec_uniform_eta(p, mem.keccak, s1_mut, rhoprime, nonce);
+    crate::expands::polyvec_uniform_eta(p, mem.keccak, s2_mut, rhoprime, nonce);
 
-        // Matrix-vector multiplication
-        mem.s1hat.copy_from_slice(&mem.s1);
-        crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.s1hat));
-        crate::poly::polyvec_matrix_pointwise_montgomery(
-            p,
-            core::mem::transmute(&mut *mem.t1),
-            mem.mat,
-            core::mem::transmute(&*mem.s1hat),
-        );
-        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.t1), crate::reduce::reduce32);
-        crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.t1));
+    // Matrix-vector multiplication
+    mem.s1hat.copy_from_slice(&mem.s1);
+    crate::ntt::polyvec_ntt(&mut *mem.s1hat);
+    crate::poly::polyvec_matrix_pointwise_montgomery(p, &mut *mem.t1, mem.mat, &*mem.s1hat);
+    crate::poly::polyvec_pointwise(&mut *mem.t1, crate::reduce::reduce32);
+    crate::ntt::polyvec_invntt_tomont(&mut *mem.t1);
 
-        // Add error vector s2
-        crate::poly::polyvec_add(
-            core::mem::transmute(&mut *mem.t1),
-            core::mem::transmute(&*mem.s2),
-        );
+    // Add error vector s2
+    crate::poly::polyvec_add(&mut *mem.t1, &*mem.s2);
 
-        // Extract t1 and write public key
-        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.t1), crate::reduce::caddq);
-        for (t0_elem, t1_elem) in mem.t0.iter_mut().zip(mem.t1.iter_mut()) {
-            for (t0_coeff, t1_coeff) in t0_elem.coeffs.iter_mut().zip(t1_elem.coeffs.iter_mut()) {
-                (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t0_coeff, *t1_coeff);
-            }
+    // Extract t1 and write public key
+    crate::poly::polyvec_pointwise(&mut *mem.t1, crate::reduce::caddq);
+    for (t0_elem, t1_elem) in mem.t0.iter_mut().zip(mem.t1.iter_mut()) {
+        for (t0_coeff, t1_coeff) in t0_elem.coeffs.iter_mut().zip(t1_elem.coeffs.iter_mut()) {
+            (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t0_coeff, *t1_coeff);
         }
-        crate::packing::pack_pk(p, mem.pk, rho, core::mem::transmute(mem.t1));
-
-        // Compute H(rho, t1) and write secret key
-        let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(mem.pk);
-        xof.finalize_xof().read(mem.tr);
-
-        crate::packing::pack_sk(p, mem.sk, rho, mem.tr, key, core::mem::transmute(mem.t0), core::mem::transmute(mem.s1), core::mem::transmute(mem.s2));
     }
+    crate::packing::pack_pk(p, mem.pk, rho, mem.t1);
+
+    // Compute H(rho, t1) and write secret key
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(mem.pk);
+    xof.finalize_xof().read(mem.tr);
+
+    crate::packing::pack_sk(p, mem.sk, rho, mem.tr, key, mem.t0, mem.s1, mem.s2);
     Ok(())
 }
 
-#[derive(Debug)]
 struct SignMemoryPool<'a> {
     sigbytes: &'a mut [u8],
     seedbuf: &'a mut [u8],
@@ -482,7 +469,6 @@ fn dilithium_signature(
     Ok(())
 }
 
-#[derive(Debug)]
 struct VerifyMemoryPool<'a> {
     buf: &'a mut [u8],
     rho: &'a mut [u8],
