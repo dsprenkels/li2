@@ -419,7 +419,11 @@ fn dilithium_signature(
                 core::mem::transmute(&mut *mem.w1),
                 core::mem::transmute(&mut *mem.w0),
             );
-            v.polyveck_pack_w1(mem.sigbytes.as_mut_ptr(), w1_ptr);
+            crate::packing::polyvec_pack_w1(
+                p,
+                &mut mem.sigbytes[..p.k * p.POLYW1_PACKEDBYTES],
+                core::mem::transmute(&*mem.w1),
+            );
 
             // Compute challenge
             let mut xof = SHAKE256::new(mem.keccak);
