@@ -69,3 +69,19 @@ pub(crate) fn polyvec_pointwise<F: Fn(i32) -> i32>(vec: &mut [Poly], f: F) {
         poly_pointwise(poly, &f);
     }
 }
+
+pub(crate) fn polyveck_decompose(p: &DilithiumParams, vec1: &mut [Poly], vec0: &mut [Poly]) {
+    for (poly1, poly0) in Iterator::zip(vec1.iter_mut(), vec0.iter_mut()) {
+        poly_decompose(p, poly1, poly0);
+    }
+}
+
+fn poly_decompose(p: &DilithiumParams, poly1: &mut Poly, poly0: &mut Poly) {
+    for (coeff1, coeff0) in Iterator::zip(poly1.coeffs.iter_mut(), poly0.coeffs.iter_mut()) {
+        let a = *coeff1;
+        let (a1, a0) = crate::rounding::decompose(p, a);
+        *coeff1 = a1;
+        *coeff0 = a0;
+    }
+}
+

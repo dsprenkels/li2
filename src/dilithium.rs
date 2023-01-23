@@ -397,19 +397,34 @@ fn dilithium_signature(
                 *(*z_ptr).vec.get_unchecked_mut(idx) = mem.y[idx];
             }
             crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.z));
-            v.polyvec_matrix_pointwise_montgomery(w1_ptr, mat_ptr, z_ptr);
-            v.polyveck_reduce(w1_ptr);
+            crate::poly::polyvec_matrix_pointwise_montgomery(
+                p,
+                core::mem::transmute(&mut *mem.w1),
+                &mem.mat,
+                core::mem::transmute(&*mem.z),
+            );
+            crate::poly::polyvec_pointwise(
+                core::mem::transmute(&mut *mem.w1),
+                crate::reduce::reduce32,
+            );
             crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.w1));
 
             // Decompose w and call the random oracle
-            v.polyveck_caddq(w1_ptr);
-            v.polyveck_decompose(w1_ptr, w0_ptr, w1_ptr);
+            crate::poly::polyvec_pointwise(
+                core::mem::transmute(&mut *mem.w1),
+                crate::reduce::caddq,
+            );
+            crate::poly::polyveck_decompose(
+                p,
+                core::mem::transmute(&mut *mem.w1),
+                core::mem::transmute(&mut *mem.w0),
+            );
             v.polyveck_pack_w1(mem.sigbytes.as_mut_ptr(), w1_ptr);
 
             // Compute challenge
             let mut xof = SHAKE256::new(mem.keccak);
             xof.update(mu);
-            let w1_packed = &mem.sigbytes[..p.k * p.POLYW1_PACKEDBYTES as usize];
+            let w1_packed = &mem.sigbytes[..p.k * p.POLYW1_PACKEDBYTES];
             xof.update(w1_packed);
             let ctilde = &mut mem.sigbytes[..SEEDBYTES];
             xof.finalize_xof().read(ctilde);
@@ -620,7 +635,7 @@ fn dilithium_verify(
         if 0 != v.unpack_sig(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
             return Err(Error::InvalidSignature);
         }
-        if 0 != v.polyvecl_chknorm(z_ptr, (p.GAMMA1 - p.BETA) as i32) {
+        if 0 != v.polyvecl_chknorm(z_ptr, p.GAMMA1 - p.BETA) {
             return Err(Error::InvalidSignature);
         }
 
