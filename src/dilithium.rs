@@ -475,7 +475,9 @@ fn dilithium_signature(
                 core::mem::transmute(&mut *mem.w0),
                 crate::reduce::reduce32,
             );
-            if 0 != v.polyveck_chknorm(w0_ptr, p.GAMMA2 - p.BETA) {
+            if crate::poly::polyvec_chknorm(core::mem::transmute(&*mem.w0), p.GAMMA2 - p.BETA)
+                .is_err()
+            {
                 continue 'rej;
             }
 
@@ -490,7 +492,7 @@ fn dilithium_signature(
                 core::mem::transmute(&mut *mem.h),
                 crate::reduce::reduce32,
             );
-            if 0 != v.polyveck_chknorm(h_ptr, p.GAMMA2) {
+            if crate::poly::polyvec_chknorm(core::mem::transmute(&*mem.h), p.GAMMA2).is_err() {
                 continue 'rej;
             }
             crate::poly::polyvec_add(
@@ -665,7 +667,7 @@ fn dilithium_verify(
         if 0 != v.unpack_sig(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
             return Err(Error::InvalidSignature);
         }
-        if 0 != v.polyvecl_chknorm(z_ptr, p.GAMMA1 - p.BETA) {
+        if crate::poly::polyvec_chknorm(core::mem::transmute(&*mem.z), p.GAMMA1 - p.BETA).is_err() {
             return Err(Error::InvalidSignature);
         }
 

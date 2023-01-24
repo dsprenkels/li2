@@ -35,7 +35,7 @@ pub(crate) fn sample_in_ball(
         };
 
         c.coeffs[i] = c.coeffs[b];
-        c.coeffs[b] = 1 - (((signs & 1) as i32) << 1);
+        c.coeffs[b] = if signs & 0x1 != 0 { -1 } else { 1 };
         signs >>= 1;
     }
 }

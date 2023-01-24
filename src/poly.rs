@@ -1,4 +1,7 @@
-use crate::{reduce, params::{DilithiumParams, N}};
+use crate::{
+    params::{DilithiumParams, N},
+    reduce,
+};
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -7,8 +10,8 @@ pub(crate) struct Poly {
 }
 
 impl Poly {
-    pub fn zero() -> Self{
-        Self {coeffs: [0; N]}
+    pub fn zero() -> Self {
+        Self { coeffs: [0; N] }
     }
 }
 
@@ -26,12 +29,17 @@ pub(crate) fn polyvec_pointwise_montgomery(c: &mut [Poly], a_poly: &Poly, b: &[P
     }
 }
 
-pub(crate) fn polyvec_matrix_pointwise_montgomery(p: &DilithiumParams, t: &mut [Poly], mat: &[Poly], v: &[Poly]) {
+pub(crate) fn polyvec_matrix_pointwise_montgomery(
+    p: &DilithiumParams,
+    t: &mut [Poly],
+    mat: &[Poly],
+    v: &[Poly],
+) {
     debug_assert_eq!(t.len(), p.k);
     debug_assert_eq!(v.len(), p.l);
     debug_assert_eq!(mat.len(), p.k * p.l);
     for (idx, t_elem) in t.iter_mut().enumerate() {
-        polyvecl_pointwise_acc_montgomery(t_elem, &mat[p.l * idx..p.l * (idx+1)], v);
+        polyvecl_pointwise_acc_montgomery(t_elem, &mat[p.l * idx..p.l * (idx + 1)], v);
     }
 }
 
@@ -48,7 +56,7 @@ pub(crate) fn polyvecl_pointwise_acc_montgomery(w: &mut Poly, u: &[Poly], v: &[P
 
 pub(crate) fn poly_add(poly: &mut Poly, poly_rhs: &Poly) {
     for (acc, x) in poly.coeffs.iter_mut().zip(poly_rhs.coeffs.iter()) {
-        *acc += x;
+        *acc = acc.wrapping_add(*x);
     }
 }
 
@@ -60,7 +68,7 @@ pub(crate) fn polyvec_add(vec: &mut [Poly], vec_rhs: &[Poly]) {
 
 pub(crate) fn poly_sub(poly: &mut Poly, poly_rhs: &Poly) {
     for (acc, x) in poly.coeffs.iter_mut().zip(poly_rhs.coeffs.iter()) {
-        *acc -= x;
+        *acc = acc.wrapping_sub(*x);
     }
 }
 
@@ -88,7 +96,7 @@ pub(crate) fn polyveck_decompose(p: &DilithiumParams, vec1: &mut [Poly], vec0: &
     }
 }
 
-fn poly_decompose(p: &DilithiumParams, poly1: &mut Poly, poly0: &mut Poly) {
+pub(crate) fn poly_decompose(p: &DilithiumParams, poly1: &mut Poly, poly0: &mut Poly) {
     for (coeff1, coeff0) in Iterator::zip(poly1.coeffs.iter_mut(), poly0.coeffs.iter_mut()) {
         let a = *coeff1;
         let (a1, a0) = crate::rounding::decompose(p, a);
@@ -97,3 +105,29 @@ fn poly_decompose(p: &DilithiumParams, poly1: &mut Poly, poly0: &mut Poly) {
     }
 }
 
+pub(crate) fn polyvec_chknorm(vec: &[Poly], bound: i32) -> Result<(), ()> {
+    for poly in vec {
+        poly_chknorm(poly, bound)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn poly_chknorm(poly: &Poly, bound: i32) -> Result<(), ()> {
+    // It is ok to leak which coefficient violates the bound since
+    // the probability for each coefficient is independent of secret
+    // data but we must not leak the sign of the centralized representative.
+
+    for coeff in poly.coeffs {
+        if abs(coeff) >= bound {
+            return Err(());
+        }
+    }
+    Ok(())
+}
+
+fn abs(mut x: i32) -> i32 {
+    let negative_mask = x >> 31;
+    let y = x & negative_mask;
+    x = x.wrapping_sub(2 * y);
+    x
+}
