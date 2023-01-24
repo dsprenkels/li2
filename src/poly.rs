@@ -58,6 +58,18 @@ pub(crate) fn polyvec_add(vec: &mut [Poly], vec_rhs: &[Poly]) {
     }
 }
 
+pub(crate) fn poly_sub(poly: &mut Poly, poly_rhs: &Poly) {
+    for (acc, x) in poly.coeffs.iter_mut().zip(poly_rhs.coeffs.iter()) {
+        *acc -= x;
+    }
+}
+
+pub(crate) fn polyvec_sub(vec: &mut [Poly], vec_rhs: &[Poly]) {
+    for (poly, poly_rhs) in vec.iter_mut().zip(vec_rhs.iter()) {
+        poly_sub(poly, poly_rhs);
+    }
+}
+
 pub(crate) fn poly_pointwise<F: Fn(i32) -> i32>(poly: &mut Poly, f: F) {
     for coeff in poly.coeffs.iter_mut() {
         *coeff = f(*coeff);

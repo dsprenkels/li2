@@ -1,5 +1,6 @@
 use crate::api;
 use crate::fips202::{KeccakState, SHAKE256};
+use crate::poly::poly_pointwise_montgomery;
 use crate::{
     api::{Dilithium2, Dilithium3, Dilithium5, PublicKey, SecretKey, Signature},
     params::{DilithiumParams, CRHBYTES, DILITHIUM2, DILITHIUM3, DILITHIUM5, SEEDBYTES},
@@ -336,7 +337,6 @@ fn dilithium_signature(
     let mut nonce = 0u16;
 
     unsafe {
-        let mat_ptr: *mut polyvecl = core::mem::transmute(mem.mat.as_mut_ptr());
         let s1_ptr: *mut polyvecl = core::mem::transmute(mem.s1.as_mut_ptr());
         let y_ptr: *mut polyvecl = core::mem::transmute(mem.y.as_mut_ptr());
         let z_ptr: *mut polyvecl = core::mem::transmute(mem.z.as_mut_ptr());
@@ -432,7 +432,12 @@ fn dilithium_signature(
             xof.update(w1_packed);
             let ctilde = &mut mem.sigbytes[..SEEDBYTES];
             xof.finalize_xof().read(ctilde);
-            crate::challenge::sample_in_ball(p, core::mem::transmute(&mut *mem.cp), &mem.sigbytes[0..SEEDBYTES], mem.keccak);
+            crate::challenge::sample_in_ball(
+                p,
+                core::mem::transmute(&mut *mem.cp),
+                &mem.sigbytes[0..SEEDBYTES],
+                mem.keccak,
+            );
             crate::ntt::poly_ntt(core::mem::transmute(&mut *mem.cp));
 
             // Compute z, reject if it reveals secret
@@ -442,19 +447,35 @@ fn dilithium_signature(
                 core::mem::transmute(&*mem.s1),
             );
             crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.z));
-            v.polyvecl_add(z_ptr, z_ptr, y_ptr);
-            v.polyvecl_reduce(z_ptr);
-            if 0 != v.polyvecl_chknorm(z_ptr, (p.GAMMA1 - p.BETA) as i32) {
+            crate::poly::polyvec_add(
+                core::mem::transmute(&mut *mem.z),
+                core::mem::transmute(&mut *mem.y),
+            );
+            crate::poly::polyvec_pointwise(
+                core::mem::transmute(&mut *mem.z),
+                crate::reduce::reduce32,
+            );
+            if 0 != v.polyvecl_chknorm(z_ptr, p.GAMMA1 - p.BETA) {
                 continue 'rej;
             }
 
             // Check that subtracting cs2 does not change high bits of w and
             // low bits do not reveal secret information
-            v.polyveck_pointwise_poly_montgomery(h_ptr, mem.cp, s2_ptr);
+            crate::poly::polyvec_pointwise_montgomery(
+                core::mem::transmute(&mut *mem.h),
+                core::mem::transmute(&mut *mem.cp),
+                core::mem::transmute(&mut *mem.s2),
+            );
             crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.h));
-            v.polyveck_sub(w0_ptr, w0_ptr, h_ptr);
-            v.polyveck_reduce(w0_ptr);
-            if 0 != v.polyveck_chknorm(w0_ptr, (p.GAMMA2 - p.BETA) as i32) {
+            crate::poly::polyvec_sub(
+                core::mem::transmute(&mut *mem.w0),
+                core::mem::transmute(&mut *mem.h),
+            );
+            crate::poly::polyvec_pointwise(
+                core::mem::transmute(&mut *mem.w0),
+                crate::reduce::reduce32,
+            );
+            if 0 != v.polyveck_chknorm(w0_ptr, p.GAMMA2 - p.BETA) {
                 continue 'rej;
             }
 
@@ -465,11 +486,17 @@ fn dilithium_signature(
                 core::mem::transmute(&*mem.t0),
             );
             crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.h));
-            v.polyveck_reduce(h_ptr);
-            if 0 != v.polyveck_chknorm(h_ptr, p.GAMMA2 as i32) {
+            crate::poly::polyvec_pointwise(
+                core::mem::transmute(&mut *mem.h),
+                crate::reduce::reduce32,
+            );
+            if 0 != v.polyveck_chknorm(h_ptr, p.GAMMA2) {
                 continue 'rej;
             }
-            v.polyveck_add(w0_ptr, w0_ptr, h_ptr);
+            crate::poly::polyvec_add(
+                core::mem::transmute(&mut *mem.w0),
+                core::mem::transmute(&mut *mem.h),
+            );
             let n = v.polyveck_make_hint(h_ptr, w0_ptr, w1_ptr);
             if n > p.OMEGA {
                 continue 'rej;
