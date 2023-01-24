@@ -27,6 +27,7 @@ impl core::fmt::Display for Error {
 
 // TODO: Reorganize all of the modules
 mod api;
+mod challenge;
 mod dilithium;
 mod expanda;
 mod expands;

@@ -432,7 +432,7 @@ fn dilithium_signature(
             xof.update(w1_packed);
             let ctilde = &mut mem.sigbytes[..SEEDBYTES];
             xof.finalize_xof().read(ctilde);
-            v.poly_challenge(mem.cp, mem.sigbytes.as_ptr());
+            crate::challenge::sample_in_ball(p, core::mem::transmute(&mut *mem.cp), &mem.sigbytes[0..SEEDBYTES], mem.keccak);
             crate::ntt::poly_ntt(core::mem::transmute(&mut *mem.cp));
 
             // Compute z, reject if it reveals secret
@@ -628,7 +628,6 @@ fn dilithium_verify(
         let buf_ptr = mem.buf.as_mut_ptr();
         let rho_ptr = mem.rho.as_mut_ptr();
         let c_ptr = mem.c.as_mut_ptr();
-        let cp_ptr = mem.cp;
         let mat_ptr = core::mem::transmute(mem.mat.as_mut_ptr());
         let z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
         let t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
@@ -657,12 +656,13 @@ fn dilithium_verify(
         xof.finalize_xof().read(mem.mu);
 
         /* Matrix-vector multiplication; compute Az - c2^dt1 */
-        v.poly_challenge(cp_ptr, c_ptr);
+        crate::challenge::sample_in_ball(p, core::mem::transmute(&mut *mem.cp), &mem.c, mem.keccak);
         crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, mem.rho);
 
         v.polyvecl_ntt(z_ptr);
         v.polyvec_matrix_pointwise_montgomery(w1_ptr, mat_ptr, z_ptr);
 
+        let cp_ptr = &mut *mem.cp;
         v.poly_ntt(cp_ptr);
         v.polyveck_shiftl(t1_ptr);
         v.polyveck_ntt(t1_ptr);
@@ -739,9 +739,9 @@ mod tests {
                     unsafe {
                         let mlen = 33 * (idx + 1);
                         let msg = &msgs[idx][0..mlen];
-                        let mut sk_expected = vec![0; p.CRYPTO_SECRETKEYBYTES as usize];
-                        let mut pk_expected = vec![0; p.CRYPTO_PUBLICKEYBYTES as usize];
-                        let mut sig_expected = vec![0; p.CRYPTO_BYTES as usize];
+                        let mut sk_expected = vec![0; p.CRYPTO_SECRETKEYBYTES];
+                        let mut pk_expected = vec![0; p.CRYPTO_PUBLICKEYBYTES];
+                        let mut sig_expected = vec![0; p.CRYPTO_BYTES];
                         let ref mut siglen = 0;
 
                         // Generate the expected values
@@ -766,7 +766,7 @@ mod tests {
                                 mlen,
                                 pk_expected.as_ptr(),
                             );
-                        assert_eq!(*siglen, p.CRYPTO_BYTES as usize);
+                        assert_eq!(*siglen, p.CRYPTO_BYTES);
 
                         // Generate the actual values
                         randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
@@ -850,7 +850,7 @@ mod tests {
         let (sk, pk) = dilithium3_keygen_from_seed(&seed).unwrap();
 
         let sigbytes_expected = unsafe {
-            let mut sig = [0; DILITHIUM3.CRYPTO_BYTES as usize];
+            let mut sig = [0; DILITHIUM3.CRYPTO_BYTES];
             let mut siglen = 0;
             crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_signature(
                 sig.as_mut_ptr(),
@@ -859,7 +859,7 @@ mod tests {
                 0,
                 sk.bytes.as_ptr(),
             );
-            assert_eq!(siglen, DILITHIUM3.CRYPTO_BYTES as usize, "siglen mismatch");
+            assert_eq!(siglen, DILITHIUM3.CRYPTO_BYTES, "siglen mismatch");
             sig
         };
         let sig_actual = dilithium3_signature(&sk, &[]).unwrap();

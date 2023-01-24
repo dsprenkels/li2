@@ -35,7 +35,7 @@ pub(crate) struct DilithiumParams {
     pub(crate) max_attempts: u16,
 
     pub(crate) ETA: i32,
-    pub(crate) TAU: u32,
+    pub(crate) TAU: u8,
     pub(crate) BETA: i32,
     pub(crate) GAMMA1: i32,
     pub(crate) GAMMA2: i32,
@@ -60,7 +60,7 @@ pub(crate) const DILITHIUM2: DilithiumParams = DilithiumParams {
     max_attempts: 331,
 
     ETA: dilithium2::ETA as i32,
-    TAU: dilithium2::TAU,
+    TAU: dilithium2::TAU as u8,
     BETA: dilithium2::BETA as i32,
     GAMMA1: dilithium2::GAMMA1 as i32,
     GAMMA2: dilithium2::GAMMA2 as i32,
@@ -85,7 +85,7 @@ pub(crate) const DILITHIUM3: DilithiumParams = DilithiumParams {
     max_attempts: 406,
 
     ETA: dilithium3::ETA as i32,
-    TAU: dilithium3::TAU,
+    TAU: dilithium3::TAU as u8,
     BETA: dilithium3::BETA as i32,
     GAMMA1: dilithium3::GAMMA1 as i32,
     GAMMA2: dilithium3::GAMMA2 as i32,
@@ -110,7 +110,7 @@ pub(crate) const DILITHIUM5: DilithiumParams = DilithiumParams {
     max_attempts: 295,
 
     ETA: dilithium5::ETA as i32,
-    TAU: dilithium5::TAU,
+    TAU: dilithium5::TAU as u8,
     BETA: dilithium5::BETA as i32,
     GAMMA1: dilithium5::GAMMA1 as i32,
     GAMMA2: dilithium5::GAMMA2 as i32,
