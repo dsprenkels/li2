@@ -150,7 +150,11 @@ pub(crate) fn polyvec_pack_w1(p: &DilithiumParams, w1packed: &mut [u8], w1: &[cr
     debug_assert_eq!(w1packed.len(), p.k * p.POLYW1_PACKEDBYTES);
     let mut offset = 0;
     for poly in w1 {
-        polyw1_pack(p, &mut w1packed[offset..offset + p.POLYW1_PACKEDBYTES], poly);
+        polyw1_pack(
+            p,
+            &mut w1packed[offset..offset + p.POLYW1_PACKEDBYTES],
+            poly,
+        );
         offset += p.POLYW1_PACKEDBYTES;
     }
     debug_assert_eq!(offset, p.k * p.POLYW1_PACKEDBYTES);
@@ -177,5 +181,58 @@ pub(crate) fn polyw1_pack(p: &DilithiumParams, w1packed: &mut [u8], poly: &crate
         }
     } else {
         unreachable!("invalid GAMMA2 value ({})", p.GAMMA2);
+    }
+}
+
+pub(crate) fn polyz_unpack(p: &DilithiumParams, poly: &mut crate::poly::Poly, zpacked: &[u8]) {
+    assert_eq!(zpacked.len(), p.POLYZ_PACKEDBYTES);
+    if p.GAMMA1 == 2i32.pow(17) {
+        let dest = poly.coeffs.chunks_exact_mut(4);
+        let src = zpacked.chunks_exact(9);
+        for (poly_chunk, zpacked_chunk) in Iterator::zip(dest, src) {
+            poly_chunk[0] = zpacked_chunk[0] as i32;
+            poly_chunk[0] |= (zpacked_chunk[1] as i32) << 8;
+            poly_chunk[0] |= (zpacked_chunk[2] as i32) << 16;
+            poly_chunk[0] &= 0x3FFFF;
+
+            poly_chunk[1] = (zpacked_chunk[2] as i32) >> 2;
+            poly_chunk[1] |= (zpacked_chunk[3] as i32) << 6;
+            poly_chunk[1] |= (zpacked_chunk[4] as i32) << 14;
+            poly_chunk[1] &= 0x3FFFF;
+
+            poly_chunk[2] = (zpacked_chunk[4] as i32) >> 4;
+            poly_chunk[2] |= (zpacked_chunk[5] as i32) << 4;
+            poly_chunk[2] |= (zpacked_chunk[6] as i32) << 12;
+            poly_chunk[2] &= 0x3FFFF;
+
+            poly_chunk[3] = (zpacked_chunk[6] as i32) >> 6;
+            poly_chunk[3] |= (zpacked_chunk[7] as i32) << 2;
+            poly_chunk[3] |= (zpacked_chunk[8] as i32) << 10;
+            poly_chunk[3] &= 0x3FFFF;
+
+            poly_chunk[0] = p.GAMMA1 - poly_chunk[0];
+            poly_chunk[1] = p.GAMMA1 - poly_chunk[1];
+            poly_chunk[2] = p.GAMMA1 - poly_chunk[2];
+            poly_chunk[3] = p.GAMMA1 - poly_chunk[3];
+        }
+    } else if p.GAMMA1 == 2i32.pow(19) {
+        let dest = poly.coeffs.chunks_exact_mut(2);
+        let src = zpacked.chunks_exact(5);
+        for (poly_chunk, zpacked_chunk) in Iterator::zip(dest, src) {
+            poly_chunk[0] = zpacked_chunk[0] as i32;
+            poly_chunk[0] |= (zpacked_chunk[1] as i32) << 8;
+            poly_chunk[0] |= (zpacked_chunk[2] as i32) << 16;
+            poly_chunk[0] &= 0xFFFFF;
+
+            poly_chunk[1] = (zpacked_chunk[2] as i32) >> 4;
+            poly_chunk[1] |= (zpacked_chunk[3] as i32) << 4;
+            poly_chunk[1] |= (zpacked_chunk[4] as i32) << 12;
+            poly_chunk[0] &= 0xFFFFF;
+
+            poly_chunk[0] = p.GAMMA1 - poly_chunk[0];
+            poly_chunk[1] = p.GAMMA1 - poly_chunk[1];
+        }
+    } else {
+        unreachable!("invalid GAMMA1 value ({})", p.GAMMA1);
     }
 }

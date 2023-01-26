@@ -1,12 +1,17 @@
 use digest::{ExtendableOutput, Update, XofReader};
 
 use crate::{
-    poly::Poly,
     fips202::{KeccakState, SHAKE128},
     params::{DilithiumParams, N, Q},
+    poly::Poly,
 };
 
-pub(crate) fn polyvec_matrix_expand(p: &DilithiumParams, keccak: &mut KeccakState, mat: &mut [Poly], rho: &[u8]) {
+pub(crate) fn polyvec_matrix_expand(
+    p: &DilithiumParams,
+    keccak: &mut KeccakState,
+    mat: &mut [Poly],
+    rho: &[u8],
+) {
     let mut idx = 0;
     for i in 0..p.k {
         for j in 0..p.l {

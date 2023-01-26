@@ -30,6 +30,7 @@ mod api;
 mod challenge;
 mod dilithium;
 mod expanda;
+mod expandmask;
 mod expands;
 mod fips202;
 mod ntt;

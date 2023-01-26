@@ -182,7 +182,7 @@ fn dilithium_keygen_from_seed(
     crate::poly::polyvec_pointwise(&mut *mem.t1, crate::reduce::caddq);
     for (t0_elem, t1_elem) in mem.t0.iter_mut().zip(mem.t1.iter_mut()) {
         for (t0_coeff, t1_coeff) in t0_elem.coeffs.iter_mut().zip(t1_elem.coeffs.iter_mut()) {
-            (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t0_coeff, *t1_coeff);
+            (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t1_coeff);
         }
     }
     crate::packing::pack_pk(p, mem.pk, rho, mem.t1);
@@ -218,7 +218,7 @@ fn dilithium2_signature(
 ) -> Result<Signature<Dilithium2>, Error> {
     const P: DilithiumParams = DILITHIUM2;
     let v = P.variant;
-    let mut sigbytes = [0; P.CRYPTO_BYTES as usize];
+    let mut sigbytes = [0; P.CRYPTO_BYTES];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
     let mut s1 = <[poly; P.l]>::default();
@@ -255,7 +255,7 @@ fn dilithium3_signature(
     m: &[u8],
 ) -> Result<Signature<Dilithium3>, Error> {
     const P: DilithiumParams = DILITHIUM3;
-    let mut sigbytes = [0; P.CRYPTO_BYTES as usize];
+    let mut sigbytes = [0; P.CRYPTO_BYTES];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
 
@@ -294,7 +294,7 @@ fn dilithium5_signature(
     m: &[u8],
 ) -> Result<Signature<Dilithium5>, Error> {
     const P: DilithiumParams = DILITHIUM5;
-    let mut sigbytes = [0; P.CRYPTO_BYTES as usize];
+    let mut sigbytes = [0; P.CRYPTO_BYTES];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
     let mut s1 = <[poly; P.l]>::default();
@@ -389,7 +389,7 @@ fn dilithium_signature(
             }
 
             // Sample intermediate vector y
-            v.polyvecl_uniform_gamma1(y_ptr, rhoprime.as_ptr(), nonce);
+            crate::expandmask::polyvecl_uniform_gamma1(p, core::mem::transmute(&mut *mem.y), rhoprime, nonce, mem.keccak);
             nonce += 1;
 
             // Matrix-vector multiplication
@@ -455,7 +455,9 @@ fn dilithium_signature(
                 core::mem::transmute(&mut *mem.z),
                 crate::reduce::reduce32,
             );
-            if 0 != v.polyvecl_chknorm(z_ptr, p.GAMMA1 - p.BETA) {
+            if crate::poly::polyvec_chknorm(core::mem::transmute(&*mem.z), p.GAMMA1 - p.BETA)
+                .is_err()
+            {
                 continue 'rej;
             }
 
@@ -654,13 +656,10 @@ fn dilithium_verify(
     let v = p.variant;
 
     unsafe {
-        let buf_ptr = mem.buf.as_mut_ptr();
         let rho_ptr = mem.rho.as_mut_ptr();
         let c_ptr = mem.c.as_mut_ptr();
-        let mat_ptr = core::mem::transmute(mem.mat.as_mut_ptr());
         let z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
         let t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
-        let w1_ptr = core::mem::transmute(mem.w1.as_mut_ptr());
         let h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
 
         v.unpack_pk(rho_ptr, t1_ptr, pk_bytes.as_ptr());
@@ -688,23 +687,42 @@ fn dilithium_verify(
         crate::challenge::sample_in_ball(p, core::mem::transmute(&mut *mem.cp), &mem.c, mem.keccak);
         crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, mem.rho);
 
-        v.polyvecl_ntt(z_ptr);
-        v.polyvec_matrix_pointwise_montgomery(w1_ptr, mat_ptr, z_ptr);
+        crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.z));
+        crate::poly::polyvec_matrix_pointwise_montgomery(
+            p,
+            core::mem::transmute(&mut *mem.w1),
+            core::mem::transmute(mem.mat),
+            core::mem::transmute(mem.z),
+        );
 
-        let cp_ptr = &mut *mem.cp;
-        v.poly_ntt(cp_ptr);
-        v.polyveck_shiftl(t1_ptr);
-        v.polyveck_ntt(t1_ptr);
-        v.polyveck_pointwise_poly_montgomery(t1_ptr, cp_ptr, t1_ptr);
-
-        v.polyveck_sub(w1_ptr, w1_ptr, t1_ptr);
-        v.polyveck_reduce(w1_ptr);
-        v.polyveck_invntt_tomont(w1_ptr);
+        crate::ntt::poly_ntt(core::mem::transmute(&mut *mem.cp));
+        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.t1), |x| {
+            x << crate::params::D
+        });
+        crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.t1));
+        crate::poly::polyvec_pointwise_montgomery_inplace(
+            core::mem::transmute(&mut *mem.t1),
+            core::mem::transmute(&*mem.cp),
+        );
+        crate::poly::polyvec_sub(
+            core::mem::transmute(&mut *mem.w1),
+            core::mem::transmute(&*mem.t1),
+        );
+        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.w1), |x| {
+            crate::reduce::reduce32(x)
+        });
+        crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.w1));
 
         // Reconstruct w1
-        v.polyveck_caddq(w1_ptr);
-        v.polyveck_use_hint(w1_ptr, w1_ptr, h_ptr);
-        v.polyveck_pack_w1(buf_ptr, w1_ptr);
+        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.w1), |x| {
+            crate::reduce::caddq(x)
+        });
+        crate::poly::polyvec_use_hint(
+            p,
+            core::mem::transmute(&mut *mem.w1),
+            core::mem::transmute(&*mem.h),
+        );
+        crate::packing::polyvec_pack_w1(p, mem.buf, core::mem::transmute(&*mem.w1));
 
         // Call random oracle and verify challenge
         let mut xof = SHAKE256::new(mem.keccak);

@@ -16,16 +16,31 @@ impl Poly {
 }
 
 pub(crate) fn poly_pointwise_montgomery(c: &mut Poly, a: &Poly, b: &Poly) {
+    let dest = c.coeffs.iter_mut();
     let src = a.coeffs.iter().zip(b.coeffs.iter());
-    for (c_coeff, (a_coeff, b_coeff)) in c.coeffs.iter_mut().zip(src) {
+    for (c_coeff, (a_coeff, b_coeff)) in Iterator::zip(dest, src) {
         *c_coeff = reduce::montgomery_reduce((*a_coeff as i64).wrapping_mul(*b_coeff as i64));
     }
 }
 
 pub(crate) fn polyvec_pointwise_montgomery(c: &mut [Poly], a_poly: &Poly, b: &[Poly]) {
     debug_assert_eq!(c.len(), b.len());
-    for (c_poly, b_poly) in c.iter_mut().zip(b.iter()) {
+    for (c_poly, b_poly) in Iterator::zip(c.iter_mut(), b.iter()) {
         poly_pointwise_montgomery(c_poly, a_poly, b_poly);
+    }
+}
+
+pub(crate) fn poly_pointwise_montgomery_inplace(a: &mut Poly, b: &Poly) {
+    let dest = a.coeffs.iter_mut();
+    let src = b.coeffs.iter();
+    for (a_coeff, b_coeff) in Iterator::zip(dest, src) {
+        *a_coeff = reduce::montgomery_reduce((*a_coeff as i64).wrapping_mul(*b_coeff as i64));
+    }
+}
+
+pub(crate) fn polyvec_pointwise_montgomery_inplace(a: &mut [Poly], b: &Poly) {
+    for poly in a.iter_mut() {
+        poly_pointwise_montgomery_inplace(poly, b);
     }
 }
 
@@ -126,8 +141,20 @@ pub(crate) fn poly_chknorm(poly: &Poly, bound: i32) -> Result<(), ()> {
 }
 
 fn abs(mut x: i32) -> i32 {
-    let negative_mask = x >> 31;
+    let negative_mask = core::hint::black_box(x >> 31);
     let y = x & negative_mask;
     x = x.wrapping_sub(2 * y);
     x
+}
+
+pub(crate) fn polyvec_use_hint(p: &DilithiumParams, vec: &mut [Poly], hint: &[Poly]) {
+    for (vec_elem, hint_elem) in Iterator::zip(vec.iter_mut(), hint.iter()) {
+        poly_use_hint(p, vec_elem, hint_elem);
+    }
+}
+
+pub(crate) fn poly_use_hint(p: &DilithiumParams, poly: &mut Poly, hint: &Poly) {
+    for (coeff, hint_coeff) in Iterator::zip(poly.coeffs.iter_mut(), hint.coeffs.iter()) {
+        *coeff = crate::rounding::use_hint(p, *coeff, *hint_coeff);
+    }
 }

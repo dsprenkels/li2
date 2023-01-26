@@ -10,8 +10,6 @@ use crate::{
 };
 use core::ops;
 
-
-
 // TODO: ||R - Q|| is smaller than ||R||.  Replace?
 const PSI: i32 = 1753;
 

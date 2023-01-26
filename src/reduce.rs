@@ -40,12 +40,14 @@ pub(crate) const fn montgomery_reduce(a: i64) -> i32 {
 }
 
 pub(crate) const fn reduce32(a: i32) -> i32 {
-    let t = (a + (1 << 22)) >> 23;
+    let t = a.wrapping_add(1 << 22);
+    let t = t >> 23;
     let t = a - t * Q;
     t
 }
 
-pub(crate) const fn caddq(mut a: i32) -> i32 {
-    a += (a >> 31) & Q;
+pub(crate) fn caddq(mut a: i32) -> i32 {
+    let mask = core::hint::black_box(a >> 31);
+    a += mask & Q;
     a
 }
