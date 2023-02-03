@@ -14,6 +14,7 @@ Goals
   - AVX2, Cortex-M4, Cortex-M3
 * Second-class support for:
   - Cortex-M7, Cortex-M33
+* Properly unit tested, regression tested, and vector-tested
 
 ## Plans
 
