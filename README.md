@@ -32,7 +32,8 @@ Goals
 ## Why I am doing it
 
 I am writing a Dilithium thesis, and I would like to consolidate all of my results into a single implementation (they are now scattered across different papers). I would like to use this implementation as the basis for all the benchmarks that I am planning to put in the thesis.
-Amber Sprenkels: Why Rust
+
+## Why Rust
 
 Rust is relatively easy to get as fast as C. However it has two main benefits over C:
 
