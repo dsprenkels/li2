@@ -338,7 +338,6 @@ fn dilithium_signature(
 
     unsafe {
         let s1_ptr: *mut polyvecl = core::mem::transmute(mem.s1.as_mut_ptr());
-        let y_ptr: *mut polyvecl = core::mem::transmute(mem.y.as_mut_ptr());
         let z_ptr: *mut polyvecl = core::mem::transmute(mem.z.as_mut_ptr());
         let t0_ptr: *mut polyveck = core::mem::transmute(mem.t0.as_mut_ptr());
         let s2_ptr: *mut polyveck = core::mem::transmute(mem.s2.as_mut_ptr());
@@ -501,8 +500,13 @@ fn dilithium_signature(
                 core::mem::transmute(&mut *mem.w0),
                 core::mem::transmute(&mut *mem.h),
             );
-            let n = v.polyveck_make_hint(h_ptr, w0_ptr, w1_ptr);
-            if n > p.OMEGA {
+            // let n = v.polyveck_make_hint(h_ptr, w0_ptr, w1_ptr);
+            let hints_popcount = crate::poly::polyvec_make_hint(
+                p,
+                core::mem::transmute(&mut *mem.w0),
+                core::mem::transmute(&*mem.w1),
+            );
+            if hints_popcount > p.OMEGA {
                 continue 'rej;
             }
 
@@ -511,7 +515,7 @@ fn dilithium_signature(
                 mem.sigbytes.as_mut_ptr(),
                 mem.sigbytes.as_ptr(),
                 z_ptr,
-                h_ptr,
+                w0_ptr,
             );
             break 'rej;
         }

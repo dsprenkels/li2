@@ -158,3 +158,21 @@ pub(crate) fn poly_use_hint(p: &DilithiumParams, poly: &mut Poly, hint: &Poly) {
         *coeff = crate::rounding::use_hint(p, *coeff, *hint_coeff);
     }
 }
+
+pub(crate) fn poly_make_hint(p: &DilithiumParams, poly0: &mut Poly, poly1: &Poly) -> usize {
+    let mut popcount = 0;
+    for (coeff0, coeff1) in Iterator::zip(poly0.coeffs.iter_mut(), poly1.coeffs.iter()) {
+        let hint = crate::rounding::make_hint(p, *coeff0, *coeff1);
+        *coeff0 = i32::from(hint);
+        popcount += usize::from(hint);
+    }
+    popcount
+}
+
+pub(crate) fn polyvec_make_hint(p: &DilithiumParams, vec0: &mut [Poly], vec1: &[Poly]) -> usize {
+    let mut popcount = 0;
+    for (poly0, poly1) in Iterator::zip(vec0.iter_mut(), vec1.iter()) {
+        popcount += poly_make_hint(p, poly0, poly1);
+    }
+    popcount
+}

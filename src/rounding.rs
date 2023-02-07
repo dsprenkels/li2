@@ -47,3 +47,8 @@ pub(crate) fn use_hint(p: &DilithiumParams, coeff: i32, hint: i32) -> i32 {
         unreachable!("invalid GAMMA2 value ({})", p.GAMMA2);
     }
 }
+
+/// Returns true on overflow
+pub(crate) fn make_hint(p: &DilithiumParams, a0: i32, a1: i32) -> bool {
+    a0 > p.GAMMA2 || a0 < -p.GAMMA2 || (a0 == -p.GAMMA2 && a1 != 0)
+}
