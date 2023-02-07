@@ -1,5 +1,7 @@
+use core::hint;
+
 use crate::{
-    params::{DilithiumParams, SEEDBYTES},
+    params::{DilithiumParams, CRHBYTES, SEEDBYTES},
     poly,
 };
 
@@ -234,5 +236,98 @@ pub(crate) fn polyz_unpack(p: &DilithiumParams, poly: &mut crate::poly::Poly, zp
         }
     } else {
         unreachable!("invalid GAMMA1 value ({})", p.GAMMA1);
+    }
+}
+
+pub(crate) fn pack_sig(
+    p: &DilithiumParams,
+    sig: &mut [u8],
+    c: &[u8],
+    z: &[crate::poly::Poly],
+    h: &[crate::poly::Poly],
+) {
+    debug_assert_eq!(sig.len(), p.CRYPTO_BYTES);
+    debug_assert_eq!(c.len(), SEEDBYTES);
+    debug_assert_eq!(z.len(), p.l);
+    debug_assert_eq!(h.len(), p.k);
+
+    // Output challenge
+    let mut offset = 0;
+    (&mut sig[offset..offset + SEEDBYTES]).copy_from_slice(c);
+    offset += SEEDBYTES;
+
+    // Output z
+    for poly in z {
+        polyz_pack(p, &mut sig[offset..offset + p.POLYZ_PACKEDBYTES], poly);
+        offset += p.POLYZ_PACKEDBYTES;
+    }
+
+    // Output hints
+    pack_hints(p, &mut sig[offset..offset + p.OMEGA + p.k], h);
+    offset += p.OMEGA + p.k;
+
+    debug_assert_eq!(offset, p.CRYPTO_BYTES);
+}
+
+pub(crate) fn polyz_pack(p: &DilithiumParams, zpacked: &mut [u8], poly: &crate::poly::Poly) {
+    debug_assert_eq!(zpacked.len(), p.POLYZ_PACKEDBYTES);
+
+    if p.GAMMA1 == 2i32.pow(17) {
+        let dest = zpacked.chunks_exact_mut(9);
+        let src = poly.coeffs.chunks_exact(4);
+        for (zpacked_chunk, poly_chunk) in Iterator::zip(dest, src) {
+            let t0 = p.GAMMA1 - poly_chunk[0];
+            let t1 = p.GAMMA1 - poly_chunk[1];
+            let t2 = p.GAMMA1 - poly_chunk[2];
+            let t3 = p.GAMMA1 - poly_chunk[3];
+
+            zpacked_chunk[0] = (t0) as u8;
+            zpacked_chunk[1] = (t0 >> 8) as u8;
+            zpacked_chunk[2] = (t0 >> 16) as u8;
+            zpacked_chunk[2] |= (t1 << 2) as u8;
+            zpacked_chunk[3] = (t1 >> 6) as u8;
+            zpacked_chunk[4] = (t1 >> 14) as u8;
+            zpacked_chunk[4] |= (t2 << 4) as u8;
+            zpacked_chunk[5] = (t2 >> 4) as u8;
+            zpacked_chunk[6] = (t2 >> 12) as u8;
+            zpacked_chunk[6] |= (t3 << 6) as u8;
+            zpacked_chunk[7] = (t3 >> 2) as u8;
+            zpacked_chunk[8] = (t3 >> 10) as u8;
+        }
+    } else if p.GAMMA1 == 2i32.pow(19) {
+        let dest = zpacked.chunks_exact_mut(5);
+        let src = poly.coeffs.chunks_exact(2);
+        for (zpacked_chunk, poly_chunk) in Iterator::zip(dest, src) {
+            let t0 = p.GAMMA1 - poly_chunk[0];
+            let t1 = p.GAMMA1 - poly_chunk[1];
+
+            zpacked_chunk[0] = (t0) as u8;
+            zpacked_chunk[1] = (t0 >> 8) as u8;
+            zpacked_chunk[2] = (t0 >> 16) as u8;
+            zpacked_chunk[2] |= (t1 << 4) as u8;
+            zpacked_chunk[3] = (t1 >> 4) as u8;
+            zpacked_chunk[4] = (t1 >> 12) as u8;
+        }
+    } else {
+        unreachable!("invalid GAMMA1 value ({})", p.GAMMA1);
+    }
+}
+
+pub(crate) fn pack_hints(p: &DilithiumParams, hints_packed: &mut [u8], h: &[crate::poly::Poly]) {
+    debug_assert_eq!(hints_packed.len(), p.OMEGA + p.k);
+    debug_assert_eq!(h.len(), p.k);
+
+    hints_packed.fill(0);
+
+    let mut offset = 0u8;
+    for (vec_idx, h_poly) in h.iter().enumerate() {
+        for (poly_idx, coeff) in h_poly.coeffs.iter().enumerate() {
+            if *coeff != 0 {
+                debug_assert!(TryInto::<u8>::try_into(poly_idx).is_ok());
+                hints_packed[offset as usize] = poly_idx as u8;
+                offset += 1;
+            }
+        }
+        hints_packed[p.OMEGA + vec_idx] = offset;
     }
 }

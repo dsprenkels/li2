@@ -388,7 +388,13 @@ fn dilithium_signature(
             }
 
             // Sample intermediate vector y
-            crate::expandmask::polyvecl_uniform_gamma1(p, core::mem::transmute(&mut *mem.y), rhoprime, nonce, mem.keccak);
+            crate::expandmask::polyvecl_uniform_gamma1(
+                p,
+                core::mem::transmute(&mut *mem.y),
+                rhoprime,
+                nonce,
+                mem.keccak,
+            );
             nonce += 1;
 
             // Matrix-vector multiplication
@@ -511,11 +517,14 @@ fn dilithium_signature(
             }
 
             // Write signature
-            v.pack_sig(
-                mem.sigbytes.as_mut_ptr(),
-                mem.sigbytes.as_ptr(),
-                z_ptr,
-                w0_ptr,
+            let mut tmp = [0; SEEDBYTES];
+            tmp.copy_from_slice(&mem.sigbytes[0..SEEDBYTES]);
+            crate::packing::pack_sig(
+                p,
+                mem.sigbytes,
+                &tmp,
+                core::mem::transmute(mem.z),
+                core::mem::transmute(mem.w0),
             );
             break 'rej;
         }
