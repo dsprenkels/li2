@@ -331,129 +331,109 @@ fn dilithium_signature(
     sk: &[u8],
     m: &[u8],
 ) -> Result<(), Error> {
-    let v = p.variant;
     let mut nonce = 0u16;
 
-    unsafe {
-        let s1_ptr: *mut polyvecl = core::mem::transmute(mem.s1.as_mut_ptr());
-        let t0_ptr: *mut polyveck = core::mem::transmute(mem.t0.as_mut_ptr());
-        let s2_ptr: *mut polyveck = core::mem::transmute(mem.s2.as_mut_ptr());
+    let seedbuf = &mut mem.seedbuf;
+    let (rho, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
+    let (tr, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
+    let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
+    let (mu, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
+    let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
+    debug_assert_eq!(seedbuf, &[]);
+    crate::packing::unpack_sk(p, rho, tr, key, mem.t0, mem.s1, mem.s2, sk);
 
-        let seedbuf = &mut mem.seedbuf;
-        let (rho, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-        let (tr, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-        let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-        let (mu, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
-        let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
-        debug_assert_eq!(seedbuf, &[]);
-        v.unpack_sk(
-            rho.as_mut_ptr(),
-            tr.as_mut_ptr(),
-            key.as_mut_ptr(),
-            t0_ptr,
-            s1_ptr,
-            s2_ptr,
-            sk.as_ptr(),
+    // Compute mu := CRH(tr || msg)
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(tr);
+    xof.update(m);
+    xof.finalize_xof().read(mu);
+
+    // Compute rhoprime := CRH(K || mu)
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(key);
+    xof.update(mu);
+    xof.finalize_xof().read(rhoprime);
+
+    // Expand matrix and transform vectors
+    crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, rho);
+    crate::ntt::polyvec_ntt(&mut mem.s1);
+    crate::ntt::polyvec_ntt(&mut mem.s2);
+    crate::ntt::polyvec_ntt(&mut mem.t0);
+
+    let mut attempt = 0;
+    'rej: loop {
+        attempt += 1;
+        if attempt >= p.max_attempts {
+            panic!("max attempts exceeded");
+        }
+
+        // Sample intermediate vector y
+        crate::expandmask::polyvecl_uniform_gamma1(p, &mut mem.y, rhoprime, nonce, mem.keccak);
+        nonce += 1;
+
+        // Matrix-vector multiplication
+        mem.z.copy_from_slice(mem.y);
+        crate::ntt::polyvec_ntt(&mut mem.z);
+        crate::poly::polyvec_matrix_pointwise_montgomery(p, &mut mem.w1, &mem.mat, &mem.z);
+        crate::poly::polyvec_pointwise(&mut mem.w1, crate::reduce::reduce32);
+        crate::ntt::polyvec_invntt_tomont(&mut mem.w1);
+
+        // Decompose w and call the random oracle
+        crate::poly::polyvec_pointwise(&mut mem.w1, crate::reduce::caddq);
+        crate::poly::polyveck_decompose(p, &mut mem.w1, &mut mem.w0);
+        crate::packing::polyvec_pack_w1(
+            p,
+            &mut mem.sigbytes[0..p.k * p.POLYW1_PACKEDBYTES],
+            &mem.w1,
         );
 
-        // Compute mu := CRH(tr || msg)
+        // Compute challenge
         let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(tr);
-        xof.update(m);
-        xof.finalize_xof().read(mu);
-
-        // Compute rhoprime := CRH(K || mu)
-        let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(key);
         xof.update(mu);
-        xof.finalize_xof().read(rhoprime);
+        let w1_packed = &mem.sigbytes[0..p.k * p.POLYW1_PACKEDBYTES];
+        xof.update(w1_packed);
+        let ctilde = &mut mem.sigbytes[..SEEDBYTES];
+        xof.finalize_xof().read(ctilde);
+        crate::challenge::sample_in_ball(p, &mut mem.cp, &mem.sigbytes[0..SEEDBYTES], mem.keccak);
+        crate::ntt::poly_ntt(&mut mem.cp);
 
-        // Expand matrix and transform vectors
-        crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, rho);
-        crate::ntt::polyvec_ntt(&mut mem.s1);
-        crate::ntt::polyvec_ntt(&mut mem.s2);
-        crate::ntt::polyvec_ntt(&mut mem.t0);
-
-        let mut attempt = 0;
-        'rej: loop {
-            attempt += 1;
-            if attempt >= p.max_attempts {
-                panic!("max attempts exceeded");
-            }
-
-            // Sample intermediate vector y
-            crate::expandmask::polyvecl_uniform_gamma1(p, &mut mem.y, rhoprime, nonce, mem.keccak);
-            nonce += 1;
-
-            // Matrix-vector multiplication
-            mem.z.copy_from_slice(mem.y);
-            crate::ntt::polyvec_ntt(&mut mem.z);
-            crate::poly::polyvec_matrix_pointwise_montgomery(p, &mut mem.w1, &mem.mat, &mem.z);
-            crate::poly::polyvec_pointwise(&mut mem.w1, crate::reduce::reduce32);
-            crate::ntt::polyvec_invntt_tomont(&mut mem.w1);
-
-            // Decompose w and call the random oracle
-            crate::poly::polyvec_pointwise(&mut mem.w1, crate::reduce::caddq);
-            crate::poly::polyveck_decompose(p, &mut mem.w1, &mut mem.w0);
-            crate::packing::polyvec_pack_w1(
-                p,
-                &mut mem.sigbytes[..p.k * p.POLYW1_PACKEDBYTES],
-                &mem.w1,
-            );
-
-            // Compute challenge
-            let mut xof = SHAKE256::new(mem.keccak);
-            xof.update(mu);
-            let w1_packed = &mem.sigbytes[..p.k * p.POLYW1_PACKEDBYTES];
-            xof.update(w1_packed);
-            let ctilde = &mut mem.sigbytes[..SEEDBYTES];
-            xof.finalize_xof().read(ctilde);
-            crate::challenge::sample_in_ball(
-                p,
-                &mut mem.cp,
-                &mem.sigbytes[0..SEEDBYTES],
-                mem.keccak,
-            );
-            crate::ntt::poly_ntt(&mut mem.cp);
-
-            // Compute z, reject if it reveals secret
-            crate::poly::polyvec_pointwise_montgomery(&mut mem.z, &mem.cp, &mem.s1);
-            crate::ntt::polyvec_invntt_tomont(&mut mem.z);
-            crate::poly::polyvec_add(&mut mem.z, &mut mem.y);
-            crate::poly::polyvec_pointwise(&mut mem.z, crate::reduce::reduce32);
-            if crate::poly::polyvec_chknorm(&mem.z, p.GAMMA1 - p.BETA).is_err() {
-                continue 'rej;
-            }
-
-            // Check that subtracting cs2 does not change high bits of w and
-            // low bits do not reveal secret information
-            crate::poly::polyvec_pointwise_montgomery(&mut mem.h, &mut mem.cp, &mut mem.s2);
-            crate::ntt::polyvec_invntt_tomont(&mut mem.h);
-            crate::poly::polyvec_sub(&mut mem.w0, &mut mem.h);
-            crate::poly::polyvec_pointwise(&mut mem.w0, crate::reduce::reduce32);
-            if crate::poly::polyvec_chknorm(&mem.w0, p.GAMMA2 - p.BETA).is_err() {
-                continue 'rej;
-            }
-
-            // Compute hints for w1
-            crate::poly::polyvec_pointwise_montgomery(&mut mem.h, &mem.cp, &mem.t0);
-            crate::ntt::polyvec_invntt_tomont(&mut mem.h);
-            crate::poly::polyvec_pointwise(&mut mem.h, crate::reduce::reduce32);
-            if crate::poly::polyvec_chknorm(&mem.h, p.GAMMA2).is_err() {
-                continue 'rej;
-            }
-            crate::poly::polyvec_add(&mut mem.w0, &mut mem.h);
-            let hints_popcount = crate::poly::polyvec_make_hint(p, &mut mem.w0, &mem.w1);
-            if hints_popcount > p.OMEGA {
-                continue 'rej;
-            }
-
-            // Write signature
-            let mut tmp = [0; SEEDBYTES];
-            tmp.copy_from_slice(&mem.sigbytes[0..SEEDBYTES]);
-            crate::packing::pack_sig(p, mem.sigbytes, &tmp, mem.z, mem.w0);
-            break 'rej;
+        // Compute z, reject if it reveals secret
+        crate::poly::polyvec_pointwise_montgomery(&mut mem.z, &mem.cp, &mem.s1);
+        crate::ntt::polyvec_invntt_tomont(&mut mem.z);
+        crate::poly::polyvec_add(&mut mem.z, &mut mem.y);
+        crate::poly::polyvec_pointwise(&mut mem.z, crate::reduce::reduce32);
+        if crate::poly::polyvec_chknorm(&mem.z, p.GAMMA1 - p.BETA).is_err() {
+            continue 'rej;
         }
+
+        // Check that subtracting cs2 does not change high bits of w and
+        // low bits do not reveal secret information
+        crate::poly::polyvec_pointwise_montgomery(&mut mem.h, &mut mem.cp, &mut mem.s2);
+        crate::ntt::polyvec_invntt_tomont(&mut mem.h);
+        crate::poly::polyvec_sub(&mut mem.w0, &mut mem.h);
+        crate::poly::polyvec_pointwise(&mut mem.w0, crate::reduce::reduce32);
+        if crate::poly::polyvec_chknorm(&mem.w0, p.GAMMA2 - p.BETA).is_err() {
+            continue 'rej;
+        }
+
+        // Compute hints for w1
+        crate::poly::polyvec_pointwise_montgomery(&mut mem.h, &mem.cp, &mem.t0);
+        crate::ntt::polyvec_invntt_tomont(&mut mem.h);
+        crate::poly::polyvec_pointwise(&mut mem.h, crate::reduce::reduce32);
+        if crate::poly::polyvec_chknorm(&mem.h, p.GAMMA2).is_err() {
+            continue 'rej;
+        }
+        crate::poly::polyvec_add(&mut mem.w0, &mut mem.h);
+        let hints_popcount = crate::poly::polyvec_make_hint(p, &mut mem.w0, &mem.w1);
+        if hints_popcount > p.OMEGA {
+            continue 'rej;
+        }
+
+        // Write signature
+        let mut tmp = [0; SEEDBYTES];
+        tmp.copy_from_slice(&mem.sigbytes[0..SEEDBYTES]);
+        crate::packing::pack_sig(p, mem.sigbytes, &tmp, mem.z, mem.w0);
+        break 'rej;
     }
     Ok(())
 }
