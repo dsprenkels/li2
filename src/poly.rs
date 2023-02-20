@@ -10,7 +10,7 @@ pub(crate) struct Poly {
 }
 
 impl Poly {
-    pub fn zero() -> Self {
+    pub(crate) fn zero() -> Self {
         Self { coeffs: [0; N] }
     }
 }

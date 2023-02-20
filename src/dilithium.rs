@@ -444,12 +444,12 @@ struct VerifyMemoryPool<'a> {
     mu: &'a mut [u8],
     c: &'a mut [u8],
     c2: &'a mut [u8],
-    cp: &'a mut poly,
+    cp: &'a mut crate::poly::Poly,
     mat: &'a mut [crate::poly::Poly],
-    z: &'a mut [poly],
-    t1: &'a mut [poly],
-    w1: &'a mut [poly],
-    h: &'a mut [poly],
+    z: &'a mut [crate::poly::Poly],
+    t1: &'a mut [crate::poly::Poly],
+    w1: &'a mut [crate::poly::Poly],
+    h: &'a mut [crate::poly::Poly],
     keccak: &'a mut crate::fips202::KeccakState,
 }
 
@@ -460,17 +460,17 @@ fn dilithium2_verify(
 ) -> Result<(), Error> {
     const p: DilithiumParams = DILITHIUM2;
 
-    let mut buf = [0; p.k * p.POLYW1_PACKEDBYTES as usize];
+    let mut buf = [0; p.k * p.POLYW1_PACKEDBYTES];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
-    let mut cp = poly::default();
+    let mut cp = crate::poly::Poly::zero();
     let mut mat: [crate::poly::Poly; p.k * p.l] = [crate::poly::Poly::zero(); p.l * p.k];
-    let mut z = <[poly; p.l]>::default();
-    let mut t1 = <[poly; p.k]>::default();
-    let mut w1 = <[poly; p.k]>::default();
-    let mut h = <[poly; p.k]>::default();
+    let mut z = [crate::poly::Poly::zero(); p.l];
+    let mut t1 = [crate::poly::Poly::zero(); p.k];
+    let mut w1 = [crate::poly::Poly::zero(); p.k];
+    let mut h = [crate::poly::Poly::zero(); p.k];
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -498,17 +498,17 @@ fn dilithium3_verify(
     const p: DilithiumParams = DILITHIUM3;
     let v = p.variant;
 
-    let mut buf = [0; p.k * p.POLYW1_PACKEDBYTES as usize];
+    let mut buf = [0; p.k * p.POLYW1_PACKEDBYTES];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
-    let mut cp = poly::default();
+    let mut cp = crate::poly::Poly::zero();
     let mut mat: [crate::poly::Poly; p.k * p.l] = [crate::poly::Poly::zero(); p.k * p.l];
-    let mut z = <[poly; p.l]>::default();
-    let mut t1 = <[poly; p.k]>::default();
-    let mut w1 = <[poly; p.k]>::default();
-    let mut h = <[poly; p.k]>::default();
+    let mut z = [crate::poly::Poly::zero(); p.l];
+    let mut t1 = [crate::poly::Poly::zero(); p.k];
+    let mut w1 = [crate::poly::Poly::zero(); p.k];
+    let mut h = [crate::poly::Poly::zero(); p.k];
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -533,19 +533,19 @@ fn dilithium5_verify(
     m: &[u8],
     sig: &Signature<Dilithium5>,
 ) -> Result<(), Error> {
-    const P: DilithiumParams = DILITHIUM5;
+    const p: DilithiumParams = DILITHIUM5;
 
-    let mut buf = [0; P.k * P.POLYW1_PACKEDBYTES as usize];
+    let mut buf = [0; p.k * p.POLYW1_PACKEDBYTES];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
-    let mut cp = poly::default();
-    let mut mat: [crate::poly::Poly; P.k * P.l] = [crate::poly::Poly::zero(); P.k * P.l];
-    let mut z = <[poly; P.l]>::default();
-    let mut t1 = <[poly; P.k]>::default();
-    let mut w1 = <[poly; P.k]>::default();
-    let mut h = <[poly; P.k]>::default();
+    let mut cp = crate::poly::Poly::zero();
+    let mut mat: [crate::poly::Poly; p.k * p.l] = [crate::poly::Poly::zero(); p.k * p.l];
+    let mut z = [crate::poly::Poly::zero(); p.l];
+    let mut t1 = [crate::poly::Poly::zero(); p.k];
+    let mut w1 = [crate::poly::Poly::zero(); p.k];
+    let mut h = [crate::poly::Poly::zero(); p.k];
 
     let mem = VerifyMemoryPool {
         buf: &mut buf,
@@ -562,7 +562,7 @@ fn dilithium5_verify(
         keccak: &mut crate::fips202::KeccakState::default(),
     };
 
-    dilithium_verify(&P, mem, &pk.bytes, m, &sig.bytes)
+    dilithium_verify(&p, mem, &pk.bytes, m, &sig.bytes)
 }
 
 fn dilithium_verify(
@@ -572,83 +572,51 @@ fn dilithium_verify(
     m: &[u8],
     sig_bytes: &[u8],
 ) -> Result<(), Error> {
-    let v = p.variant;
+    crate::packing::unpack_pk(p, mem.rho, &mut *mem.t1, pk_bytes);
+    crate::packing::unpack_sig(p, mem.c, &mut *mem.z, &mut *mem.h, sig_bytes)?;
+    crate::poly::polyvec_chknorm(&*mem.z, p.GAMMA1 - p.BETA)
+        .map_err(|()| Error::InvalidSignature)?;
 
-    unsafe {
-        let c_ptr = mem.c.as_mut_ptr();
-        let z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
-        let h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
+    // Compute tr := H(pk)
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(pk_bytes);
+    let tr = &mut mem.mu[0..SEEDBYTES];
+    xof.finalize_xof().read(tr);
 
-        crate::packing::unpack_pk(p, mem.rho, core::mem::transmute(&mut *mem.t1), pk_bytes);
-        if 0 != v.unpack_sig(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
-            return Err(Error::InvalidSignature);
-        }
-        if crate::poly::polyvec_chknorm(core::mem::transmute(&*mem.z), p.GAMMA1 - p.BETA).is_err() {
-            return Err(Error::InvalidSignature);
-        }
+    // Compute mu := CRH(tr, msg)
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(tr);
+    drop(tr);
+    xof.update(m);
+    xof.finalize_xof().read(mem.mu);
 
-        // Compute tr := H(pk)
-        let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(pk_bytes);
-        let tr = &mut mem.mu[0..SEEDBYTES];
-        xof.finalize_xof().read(tr);
+    /* Matrix-vector multiplication; compute Az - c2^dt1 */
+    crate::challenge::sample_in_ball(p, &mut *mem.cp, &mem.c, mem.keccak);
+    crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, mem.rho);
 
-        // Compute mu := CRH(tr, msg)
-        let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(tr);
-        drop(tr);
-        xof.update(m);
-        xof.finalize_xof().read(mem.mu);
+    crate::ntt::polyvec_ntt(&mut *mem.z);
+    crate::poly::polyvec_matrix_pointwise_montgomery(p, &mut *mem.w1, mem.mat, mem.z);
 
-        /* Matrix-vector multiplication; compute Az - c2^dt1 */
-        crate::challenge::sample_in_ball(p, core::mem::transmute(&mut *mem.cp), &mem.c, mem.keccak);
-        crate::expanda::polyvec_matrix_expand(p, mem.keccak, mem.mat, mem.rho);
+    crate::ntt::poly_ntt(&mut *mem.cp);
+    crate::poly::polyvec_pointwise(&mut *mem.t1, |x| x << crate::params::D);
+    crate::ntt::polyvec_ntt(&mut *mem.t1);
+    crate::poly::polyvec_pointwise_montgomery_inplace(&mut *mem.t1, &*mem.cp);
+    crate::poly::polyvec_sub(&mut *mem.w1, &*mem.t1);
+    crate::poly::polyvec_pointwise(&mut *mem.w1, crate::reduce::reduce32);
+    crate::ntt::polyvec_invntt_tomont(&mut *mem.w1);
 
-        crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.z));
-        crate::poly::polyvec_matrix_pointwise_montgomery(
-            p,
-            core::mem::transmute(&mut *mem.w1),
-            core::mem::transmute(mem.mat),
-            core::mem::transmute(mem.z),
-        );
+    // Reconstruct w1
+    crate::poly::polyvec_pointwise(&mut *mem.w1, crate::reduce::caddq);
+    crate::poly::polyvec_use_hint(p, &mut *mem.w1, &*mem.h);
+    crate::packing::polyvec_pack_w1(p, mem.buf, &*mem.w1);
 
-        crate::ntt::poly_ntt(core::mem::transmute(&mut *mem.cp));
-        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.t1), |x| {
-            x << crate::params::D
-        });
-        crate::ntt::polyvec_ntt(core::mem::transmute(&mut *mem.t1));
-        crate::poly::polyvec_pointwise_montgomery_inplace(
-            core::mem::transmute(&mut *mem.t1),
-            core::mem::transmute(&*mem.cp),
-        );
-        crate::poly::polyvec_sub(
-            core::mem::transmute(&mut *mem.w1),
-            core::mem::transmute(&*mem.t1),
-        );
-        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.w1), |x| {
-            crate::reduce::reduce32(x)
-        });
-        crate::ntt::polyvec_invntt_tomont(core::mem::transmute(&mut *mem.w1));
-
-        // Reconstruct w1
-        crate::poly::polyvec_pointwise(core::mem::transmute(&mut *mem.w1), |x| {
-            crate::reduce::caddq(x)
-        });
-        crate::poly::polyvec_use_hint(
-            p,
-            core::mem::transmute(&mut *mem.w1),
-            core::mem::transmute(&*mem.h),
-        );
-        crate::packing::polyvec_pack_w1(p, mem.buf, core::mem::transmute(&*mem.w1));
-
-        // Call random oracle and verify challenge
-        let mut xof = SHAKE256::new(mem.keccak);
-        xof.update(mem.mu);
-        xof.update(mem.buf);
-        xof.finalize_xof().read(mem.c2);
-        if mem.c == mem.c2 {
-            return Ok(());
-        }
+    // Call random oracle and verify challenge
+    let mut xof = SHAKE256::new(mem.keccak);
+    xof.update(mem.mu);
+    xof.update(mem.buf);
+    xof.finalize_xof().read(mem.c2);
+    if mem.c == mem.c2 {
+        return Ok(());
     }
     Err(crate::Error::InvalidSignature)
 }

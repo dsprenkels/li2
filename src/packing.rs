@@ -1,5 +1,7 @@
 use core::hint;
 
+use crystals_dilithium_sys::dilithium2::OMEGA;
+
 use crate::{
     params::{DilithiumParams, CRHBYTES, SEEDBYTES},
     poly,
@@ -436,8 +438,9 @@ pub(crate) fn pack_sig(
     debug_assert_eq!(z.len(), p.l);
     debug_assert_eq!(h.len(), p.k);
 
-    // Output challenge
     let mut offset = 0;
+
+    // Output challenge
     (&mut sig[offset..offset + SEEDBYTES]).copy_from_slice(c);
     offset += SEEDBYTES;
 
@@ -452,6 +455,76 @@ pub(crate) fn pack_sig(
     offset += p.OMEGA + p.k;
 
     debug_assert_eq!(offset, p.CRYPTO_BYTES);
+}
+
+pub(crate) fn unpack_sig(
+    p: &DilithiumParams,
+    c: &mut [u8],
+    z: &mut [crate::poly::Poly],
+    h: &mut [crate::poly::Poly],
+    sig: &[u8],
+) -> Result<(), crate::Error> {
+    debug_assert_eq!(c.len(), SEEDBYTES);
+    debug_assert_eq!(z.len(), p.l);
+    debug_assert_eq!(h.len(), p.k);
+    debug_assert_eq!(sig.len(), p.CRYPTO_BYTES);
+
+    let mut offset = 0;
+
+    // Load challenge
+    c.copy_from_slice(&sig[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+
+    // Load z
+    for poly in z {
+        polyz_unpack(p, poly, &sig[offset..offset + p.POLYZ_PACKEDBYTES]);
+        offset += p.POLYZ_PACKEDBYTES;
+    }
+
+    // Load hints
+    unpack_hints(p, h, &sig[offset..offset + p.OMEGA + p.k])?;
+    offset += p.OMEGA + p.k;
+
+    debug_assert_eq!(offset, p.CRYPTO_BYTES);
+    Ok(())
+}
+
+fn unpack_hints(
+    p: &DilithiumParams,
+    h: &mut [crate::poly::Poly],
+    sig: &[u8],
+) -> Result<(), crate::Error> {
+    debug_assert_eq!(h.len(), p.k);
+    debug_assert_eq!(sig.len(), p.OMEGA + p.k);
+
+    let mut offset = 0usize;
+    for (poly_idx, poly) in h.iter_mut().enumerate() {
+        let hints_start = offset;
+        let hints_end = sig[p.OMEGA + poly_idx] as usize;
+        if hints_end < hints_start || hints_end > p.OMEGA {
+            return Err(crate::Error::InvalidSignature);
+        }
+
+        for sig_idx in hints_start..hints_end {
+            let coeff_idx = sig[sig_idx] as usize;
+            if sig_idx > hints_start {
+                // Assert that the coefficients are ordered for strong unforgeability
+                let prev_coeff_idx = sig[sig_idx - 1] as usize;
+                if !(prev_coeff_idx < coeff_idx) {
+                    return Err(crate::Error::InvalidSignature);
+                }
+            }
+            poly.coeffs[coeff_idx] = 1;
+        }
+        offset = hints_end;
+    }
+
+    // Assert that the rest of the signature is zeroed
+    if !sig[offset..p.OMEGA].iter().all(|b| *b == 0) {
+        return Err(crate::Error::InvalidSignature);
+    }
+
+    Ok(())
 }
 
 pub(crate) fn polyz_pack(p: &DilithiumParams, packed: &mut [u8], poly: &crate::poly::Poly) {
