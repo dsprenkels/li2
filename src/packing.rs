@@ -121,6 +121,7 @@ pub(crate) fn polyt0_pack(p: &DilithiumParams, sk: &mut [u8], poly: &crate::poly
 }
 
 pub(crate) fn pack_pk(p: &DilithiumParams, pk: &mut [u8], rho: &[u8], t1: &[crate::poly::Poly]) {
+    debug_assert_eq!(pk.len(), p.CRYPTO_PUBLICKEYBYTES);
     debug_assert_eq!(t1.len(), p.k);
 
     let mut offset = 0;
@@ -129,6 +130,26 @@ pub(crate) fn pack_pk(p: &DilithiumParams, pk: &mut [u8], rho: &[u8], t1: &[crat
 
     for poly in t1 {
         polyt1_pack(p, &mut pk[offset..offset + p.POLYT1_PACKEDBYTES], poly);
+        offset += p.POLYT1_PACKEDBYTES;
+    }
+    debug_assert_eq!(offset, p.CRYPTO_PUBLICKEYBYTES);
+}
+
+pub(crate) fn unpack_pk(
+    p: &DilithiumParams,
+    rho: &mut [u8],
+    t1: &mut [crate::poly::Poly],
+    pk: &[u8],
+) {
+    debug_assert_eq!(pk.len(), p.CRYPTO_PUBLICKEYBYTES);
+    debug_assert_eq!(t1.len(), p.k);
+
+    let mut offset = 0;
+    rho.copy_from_slice(&pk[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+
+    for poly in t1 {
+        polyt1_unpack(p, poly, &pk[offset..offset + p.POLYT1_PACKEDBYTES]);
         offset += p.POLYT1_PACKEDBYTES;
     }
     debug_assert_eq!(offset, p.CRYPTO_PUBLICKEYBYTES);
@@ -145,6 +166,19 @@ pub(crate) fn polyt1_pack(p: &DilithiumParams, pk: &mut [u8], poly: &crate::poly
         pk_chunk[2] = ((poly_chunk[1] >> 6) | (poly_chunk[2] << 4)) as u8;
         pk_chunk[3] = ((poly_chunk[2] >> 4) | (poly_chunk[3] << 6)) as u8;
         pk_chunk[4] = (poly_chunk[3] >> 2) as u8;
+    }
+}
+
+pub(crate) fn polyt1_unpack(p: &DilithiumParams, poly: &mut crate::poly::Poly, pk: &[u8]) {
+    debug_assert_eq!(pk.len(), p.POLYT1_PACKEDBYTES);
+
+    let poly_chunks = poly.coeffs.chunks_exact_mut(4);
+    let pk_chunks = pk.chunks_exact(5);
+    for (poly_chunk, pk_chunk) in Iterator::zip(poly_chunks, pk_chunks) {
+        poly_chunk[0] = (((pk_chunk[0] as u32 >> 0) | ((pk_chunk[1] as u32) << 8)) & 0x3FF) as i32;
+        poly_chunk[1] = (((pk_chunk[1] as u32 >> 2) | ((pk_chunk[2] as u32) << 6)) & 0x3FF) as i32;
+        poly_chunk[2] = (((pk_chunk[2] as u32 >> 4) | ((pk_chunk[3] as u32) << 4)) & 0x3FF) as i32;
+        poly_chunk[3] = (((pk_chunk[3] as u32 >> 6) | ((pk_chunk[4] as u32) << 2)) & 0x3FF) as i32;
     }
 }
 

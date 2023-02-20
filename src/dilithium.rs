@@ -567,7 +567,7 @@ fn dilithium5_verify(
 
 fn dilithium_verify(
     p: &'static DilithiumParams,
-    mut mem: VerifyMemoryPool<'_>,
+    mem: VerifyMemoryPool<'_>,
     pk_bytes: &[u8],
     m: &[u8],
     sig_bytes: &[u8],
@@ -575,13 +575,11 @@ fn dilithium_verify(
     let v = p.variant;
 
     unsafe {
-        let rho_ptr = mem.rho.as_mut_ptr();
         let c_ptr = mem.c.as_mut_ptr();
         let z_ptr = core::mem::transmute(mem.z.as_mut_ptr());
-        let t1_ptr = core::mem::transmute(mem.t1.as_mut_ptr());
         let h_ptr = core::mem::transmute(mem.h.as_mut_ptr());
 
-        v.unpack_pk(rho_ptr, t1_ptr, pk_bytes.as_ptr());
+        crate::packing::unpack_pk(p, mem.rho, core::mem::transmute(&mut *mem.t1), pk_bytes);
         if 0 != v.unpack_sig(c_ptr, z_ptr, h_ptr, sig_bytes.as_ptr()) {
             return Err(Error::InvalidSignature);
         }
