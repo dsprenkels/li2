@@ -1,7 +1,4 @@
-use crate::{
-    params::{DilithiumParams, N},
-    reduce,
-};
+use crate::{params::*, reduce};
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]

@@ -11,7 +11,7 @@
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub(crate) enum Error {
+pub enum Error {
     InternalError,
     InvalidSignature,
 }
@@ -32,11 +32,12 @@ mod dilithium;
 mod expanda;
 mod expandmask;
 mod expands;
-mod fips202;
+mod keccak;
 mod ntt;
 mod packing;
 mod params;
 mod poly;
 mod reduce;
 mod rounding;
-mod variants;
+
+pub use api::{Dilithium2, Dilithium3, Dilithium5, DilithiumVariant};

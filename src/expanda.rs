@@ -1,15 +1,11 @@
 use digest::{ExtendableOutput, Update, XofReader};
 
-use crate::{
-    fips202::{KeccakState, SHAKE128},
-    params::{DilithiumParams, N, Q},
-    poly::Poly,
-};
+use crate::{keccak, params::*, poly};
 
 pub(crate) fn polyvec_matrix_expand(
     p: &DilithiumParams,
-    keccak: &mut KeccakState,
-    mat: &mut [Poly],
+    keccak: &mut keccak::KeccakState,
+    mat: &mut [poly::Poly],
     rho: &[u8],
 ) {
     let mut idx = 0;
@@ -24,12 +20,12 @@ pub(crate) fn polyvec_matrix_expand(
 
 fn poly_uniform(
     _p: &DilithiumParams,
-    keccak: &mut KeccakState,
-    poly: &mut Poly,
+    keccak: &mut keccak::KeccakState,
+    poly: &mut poly::Poly,
     seed: &[u8],
     nonce: u16,
 ) {
-    let mut xof = SHAKE128::new(keccak);
+    let mut xof = keccak::SHAKE128::new(keccak);
     xof.update(seed);
     xof.update(&nonce.to_le_bytes());
     let mut xofread = xof.finalize_xof();

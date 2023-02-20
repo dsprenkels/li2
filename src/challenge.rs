@@ -1,20 +1,17 @@
 use digest::{ExtendableOutput, Update, XofReader};
 
-use crate::{
-    params::{DilithiumParams, N},
-    poly::Poly,
-};
+use crate::{params::*, poly};
 
 pub(crate) fn sample_in_ball(
     p: &DilithiumParams,
-    c: &mut Poly,
+    c: &mut poly::Poly,
     seed: &[u8],
-    keccak: &mut crate::fips202::KeccakState,
+    keccak: &mut crate::keccak::KeccakState,
 ) {
-    debug_assert_eq!(seed.len(), crate::params::SEEDBYTES);
-    let tau = p.TAU as usize;
+    debug_assert_eq!(seed.len(), SEEDBYTES);
+    let tau = p.tau as usize;
 
-    let mut xof = crate::fips202::SHAKE256::new(keccak);
+    let mut xof = crate::keccak::SHAKE256::new(keccak);
     xof.update(seed);
     let mut xofread = xof.finalize_xof();
 
@@ -22,7 +19,7 @@ pub(crate) fn sample_in_ball(
     xofread.read(&mut signs_arr);
     let mut signs = u64::from_le_bytes(signs_arr);
 
-    *c = Poly::zero();
+    *c = poly::Poly::zero();
     for i in N - tau..N {
         let b = loop {
             let mut b_arr = [0u8];

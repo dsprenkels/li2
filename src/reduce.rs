@@ -1,4 +1,4 @@
-use crate::params::Q;
+use crate::params::*;
 
 pub const MONT_MOD: i64 = 1 << 32;
 pub const Q_INV: i32 = modinverse(Q as i64, MONT_MOD) as i32;

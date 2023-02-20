@@ -1,15 +1,11 @@
 use digest::{ExtendableOutput, Update, XofReader};
 
-use crate::{
-    fips202,
-    params::{DilithiumParams, CRHBYTES},
-    poly::Poly,
-};
+use crate::{keccak, params::*, poly};
 
 pub(crate) fn polyvec_uniform_eta(
     p: &DilithiumParams,
-    keccak: &mut fips202::KeccakState,
-    sx: &mut [Poly],
+    keccak: &mut keccak::KeccakState,
+    sx: &mut [poly::Poly],
     rhoprime: &[u8],
     mut nonce: u16,
 ) -> u16 {
@@ -22,8 +18,8 @@ pub(crate) fn polyvec_uniform_eta(
 
 fn poly_uniform_eta(
     p: &DilithiumParams,
-    keccak: &mut fips202::KeccakState,
-    poly: &mut Poly,
+    keccak: &mut keccak::KeccakState,
+    poly: &mut poly::Poly,
     seed: &[u8],
     nonce: u16,
 ) {
@@ -31,14 +27,14 @@ fn poly_uniform_eta(
 
     debug_assert_eq!(seed.len(), CRHBYTES);
 
-    let mut xof = fips202::SHAKE256::new(keccak);
+    let mut xof = keccak::SHAKE256::new(keccak);
     xof.update(seed);
     xof.update(&nonce.to_le_bytes());
     let mut xofread = xof.finalize_xof();
 
     let mut coeffs = poly.coeffs.iter_mut();
     let mut coeff = coeffs.next().expect("poly has no coefficients");
-    if p.ETA == 2 {
+    if p.eta == 2 {
         loop {
             let mut sample = [0; 1];
             xofread.read(&mut sample);
@@ -61,7 +57,7 @@ fn poly_uniform_eta(
                 };
             }
         }
-    } else if p.ETA == 4 {
+    } else if p.eta == 4 {
         loop {
             let mut sample = [0; 1];
             xofread.read(&mut sample);
@@ -83,6 +79,6 @@ fn poly_uniform_eta(
             }
         }
     } else {
-        unreachable!("invalid value for ETA: {}", p.ETA)
+        unreachable!("invalid value for ETA: {}", p.eta)
     }
 }

@@ -1,14 +1,8 @@
-use crystals_dilithium_sys::{
-    dilithium2::pqcrystals_dilithium2_ref_reduce32,
-    dilithium3::pqcrystals_dilithium3_ref_montgomery_reduce,
-};
-
 use crate::{
     params::{N, Q},
     poly::Poly,
     reduce,
 };
-use core::ops;
 
 // TODO: ||R - Q|| is smaller than ||R||.  Replace?
 const PSI: i32 = 1753;

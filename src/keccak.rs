@@ -1,11 +1,7 @@
 #![allow(non_snake_case)]
 
-use core::mem::size_of;
-
 const SHAKE128_RATE: usize = 168;
 const SHAKE256_RATE: usize = 136;
-const SHA3_256_RATE: usize = 136;
-const SHA3_512_RATE: usize = 72;
 const NROUNDS: usize = 24;
 
 #[derive(Clone, Debug, Default)]
@@ -132,7 +128,7 @@ impl<'a> Drop for SHAKE128Reader<'a> {
 }
 
 //  /* Keccak round constants */
-const KeccakF_RoundConstants: [u64; NROUNDS] = [
+const KECCAK_F_ROUND_CONSTANTS: [u64; NROUNDS] = [
     0x0000_0000_0000_0001,
     0x0000_0000_0000_8082,
     0x8000_0000_0000_808a,
@@ -213,7 +209,7 @@ pub(crate) fn KeccakF1600_StatePermute(state: &mut [u64; 25]) {
         Asu ^= Du;
         BCu = Asu.rotate_left(14);
         let mut Eba = BCa ^ ((!BCe) & BCi);
-        Eba ^= KeccakF_RoundConstants[round];
+        Eba ^= KECCAK_F_ROUND_CONSTANTS[round];
         let mut Ebe = BCe ^ ((!BCi) & BCo);
         let mut Ebi = BCi ^ ((!BCo) & BCu);
         let mut Ebo = BCo ^ ((!BCu) & BCa);
@@ -308,7 +304,7 @@ pub(crate) fn KeccakF1600_StatePermute(state: &mut [u64; 25]) {
         Esu ^= Du;
         BCu = Esu.rotate_left(14);
         Aba = BCa ^ ((!BCe) & BCi);
-        Aba ^= KeccakF_RoundConstants[round + 1];
+        Aba ^= KECCAK_F_ROUND_CONSTANTS[round + 1];
         Abe = BCe ^ ((!BCi) & BCo);
         Abi = BCi ^ ((!BCo) & BCu);
         Abo = BCo ^ ((!BCu) & BCa);
@@ -451,22 +447,4 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
     }
     assert_eq!(out, &[]);
     pos
-}
-
-pub(crate) fn shake128_init(state: &mut KeccakState) {
-    keccak_init(&mut state.s);
-    state.pos = 0;
-}
-
-pub(crate) fn shake128_absorb(state: &mut KeccakState, input: &[u8]) {
-    state.pos = keccak_absorb(&mut state.s, state.pos, SHAKE128_RATE, input);
-}
-
-pub(crate) fn shake128_finalize(state: &mut KeccakState) {
-    keccak_finalize(&mut state.s, state.pos, SHAKE128_RATE, 0x1F);
-    state.pos = SHAKE128_RATE;
-}
-
-pub(crate) fn shake128_squeeze(out: &mut [u8], state: &mut KeccakState) {
-    state.pos = keccak_squeeze(out, &mut state.s, state.pos, SHAKE128_RATE);
 }
