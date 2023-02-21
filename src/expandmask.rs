@@ -30,7 +30,7 @@ pub(crate) fn poly_uniform_gamma1(
     // coefficient.
     const BUF_CAP: usize = 20 * 256 / 8;
     let mut buf = [0; BUF_CAP];
-    let buf_len = p.polyz_packedbytes;
+    let buf_len = p.z_poly_packed_len;
 
     let mut xof = crate::keccak::SHAKE256::new(keccak);
     xof.update(seed);

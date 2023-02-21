@@ -47,8 +47,8 @@ pub(crate) fn dilithium2_keygen_from_seed(
     crate::Error,
 > {
     const P: DilithiumParams = DILITHIUM2;
-    let mut sk = [0u8; P.secretkeybytes];
-    let mut pk = [0u8; P.publickeybytes];
+    let mut sk = [0u8; P.secret_key_len];
+    let mut pk = [0u8; P.public_key_len];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
@@ -85,8 +85,8 @@ pub(crate) fn dilithium3_keygen_from_seed(
     crate::Error,
 > {
     const P: DilithiumParams = DILITHIUM3;
-    let mut sk = [0u8; P.secretkeybytes];
-    let mut pk = [0u8; P.publickeybytes];
+    let mut sk = [0u8; P.secret_key_len];
+    let mut pk = [0u8; P.public_key_len];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
@@ -123,8 +123,8 @@ pub(crate) fn dilithium5_keygen_from_seed(
     crate::Error,
 > {
     const P: DilithiumParams = DILITHIUM5;
-    let mut sk = [0u8; P.secretkeybytes];
-    let mut pk = [0u8; P.publickeybytes];
+    let mut sk = [0u8; P.secret_key_len];
+    let mut pk = [0u8; P.public_key_len];
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
     let mut tr = [0u8; SEEDBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
@@ -226,7 +226,7 @@ pub(crate) fn dilithium2_signature(
     msg: &[u8],
 ) -> Result<api::Signature<api::Dilithium2>, crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
-    let mut sigbytes = [0; P.sigbytes];
+    let mut sigbytes = [0; P.signature_len];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
     let mut s1 = [poly::Poly::zero(); P.l];
@@ -263,7 +263,7 @@ pub(crate) fn dilithium3_signature(
     m: &[u8],
 ) -> Result<api::Signature<api::Dilithium3>, crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
-    let mut sigbytes = [0; P.sigbytes];
+    let mut sigbytes = [0; P.signature_len];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
     let mut s1 = [poly::Poly::zero(); P.l];
@@ -301,7 +301,7 @@ pub(crate) fn dilithium5_signature(
     m: &[u8],
 ) -> Result<api::Signature<api::Dilithium5>, crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
-    let mut sigbytes = [0; P.sigbytes];
+    let mut sigbytes = [0; P.signature_len];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
     let mut s1 = [poly::Poly::zero(); P.l];
@@ -390,12 +390,12 @@ fn dilithium_signature(
         // Decompose w and call the random oracle
         poly::polyvec_pointwise(&mut mem.w1, crate::reduce::caddq);
         poly::polyveck_decompose(p, &mut mem.w1, &mut mem.w0);
-        packing::pack_polyvec_w1(p, &mut mem.sigbytes[0..p.k * p.polyw1_packedbytes], &mem.w1);
+        packing::pack_polyvec_w1(p, &mut mem.sigbytes[0..p.k * p.w1_poly_packed_len], &mem.w1);
 
         // Compute challenge
         let mut xof = keccak::SHAKE256::new(mem.keccak);
         xof.update(mu);
-        let w1_packed = &mem.sigbytes[0..p.k * p.polyw1_packedbytes];
+        let w1_packed = &mem.sigbytes[0..p.k * p.w1_poly_packed_len];
         xof.update(w1_packed);
         let ctilde = &mut mem.sigbytes[..SEEDBYTES];
         xof.finalize_xof().read(ctilde);
@@ -464,7 +464,7 @@ pub(crate) fn dilithium2_verify(
     sig: &api::Signature<api::Dilithium2>,
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
-    let mut buf = [0; P.k * P.polyw1_packedbytes];
+    let mut buf = [0; P.k * P.w1_poly_packed_len];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
@@ -500,7 +500,7 @@ pub(crate) fn dilithium3_verify(
     sig: &api::Signature<api::Dilithium3>,
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
-    let mut buf = [0; P.k * P.polyw1_packedbytes];
+    let mut buf = [0; P.k * P.w1_poly_packed_len];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
@@ -536,7 +536,7 @@ pub(crate) fn dilithium5_verify(
     sig: &api::Signature<api::Dilithium5>,
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
-    let mut buf = [0; P.k * P.polyw1_packedbytes];
+    let mut buf = [0; P.k * P.w1_poly_packed_len];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
@@ -672,9 +672,9 @@ mod tests {
                     unsafe {
                         let mlen = 33 * (idx + 1);
                         let msg = &msgs[idx][0..mlen];
-                        let mut sk_expected = vec![0; p.secretkeybytes];
-                        let mut pk_expected = vec![0; p.publickeybytes];
-                        let mut sig_expected = vec![0; p.sigbytes];
+                        let mut sk_expected = vec![0; p.secret_key_len];
+                        let mut pk_expected = vec![0; p.public_key_len];
+                        let mut sig_expected = vec![0; p.signature_len];
                         let ref mut siglen = 0;
 
                         // Generate the expected values
@@ -699,7 +699,7 @@ mod tests {
                                 mlen,
                                 pk_expected.as_ptr(),
                             );
-                        assert_eq!(*siglen, p.sigbytes);
+                        assert_eq!(*siglen, p.signature_len);
 
                         // Generate the actual values
                         randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
@@ -764,7 +764,7 @@ mod tests {
     );
 
     #[test]
-    #[ignore = "test is not finished"]
+    #[ignore = "todo"]
     fn test_keygen_from_seed() {
         let seed = [0; SEEDBYTES];
         let (_sk_actual, _pk_actual) = dilithium3_keygen_from_seed(&seed).unwrap();
@@ -780,7 +780,7 @@ mod tests {
         let (sk, pk) = dilithium3_keygen_from_seed(&seed).unwrap();
 
         let sigbytes_expected = unsafe {
-            let mut sig = [0; DILITHIUM3.sigbytes];
+            let mut sig = [0; DILITHIUM3.signature_len];
             let mut siglen = 0;
             crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_signature(
                 sig.as_mut_ptr(),
@@ -789,7 +789,7 @@ mod tests {
                 0,
                 sk.bytes.as_ptr(),
             );
-            assert_eq!(siglen, DILITHIUM3.sigbytes, "siglen mismatch");
+            assert_eq!(siglen, DILITHIUM3.signature_len, "siglen mismatch");
             sig
         };
         let sig_actual = dilithium3_signature(&sk, &[]).unwrap();
