@@ -4,10 +4,11 @@ use crate::{
     reduce,
 };
 
-// TODO: ||R - Q|| is smaller than ||R||.  Replace?
+/// PSI is the primitive root of unity modulo Q.
 const PSI: i32 = 1753;
 
-const ZETAS: [i32; N] = {
+/// Array of twiddle factors used by the mod-Q NTT algorithms.
+const ZETAS: [i32; N - 1] = {
     /// Naive computation of `a` to the power `x` mod `m`.
     const fn pow(a: i64, mut x: u8, m: i64) -> i64 {
         let mut acc = 1;
@@ -19,11 +20,12 @@ const ZETAS: [i32; N] = {
         acc
     }
 
-    let mut zetas = [0i32; N];
-    let mut idx = 1;
+    let mut zetas = [0i32; N - 1];
+    let mut idx = 0;
 
-    while idx < N {
-        let brv = (idx as u8).reverse_bits();
+    while idx < N - 1 {
+        let power = (idx + 1) as u8;
+        let brv = power.reverse_bits();
         let mut twiddle = pow(PSI as i64, brv, Q as i64);
         twiddle *= crate::reduce::MONT_R as i64;
         twiddle = reduce::cmod(twiddle, Q as i64);
@@ -37,58 +39,47 @@ const ZETAS: [i32; N] = {
 };
 
 pub(crate) fn poly_ntt(p: &mut Poly) {
-    // TODO: Oxidize this function
+    let mut twiddles = ZETAS.iter();
 
-    let mut k = 0;
-    let mut len = 0x80;
-    while len > 0 {
-        let mut j;
-        let mut start = 0;
-        while start < N {
-            k += 1;
-            let zeta = ZETAS[k] as i64;
-            j = start;
-            while j < start + len {
-                let t = reduce::montgomery_reduce(zeta.wrapping_mul(p.coeffs[j + len] as i64));
-                p.coeffs[j + len] = p.coeffs[j].wrapping_sub(t);
-                p.coeffs[j] = p.coeffs[j].wrapping_add(t);
-                j += 1;
+    for layer in 0..8 {
+        let subpoly_len = 0x80 >> layer;
+        for subpoly_offset in (0..N).step_by(2 * subpoly_len) {
+            let zeta = *twiddles.next().unwrap() as i64;
+            for idx in subpoly_offset..subpoly_offset + subpoly_len {
+                let t0 = zeta.wrapping_mul(p.coeffs[idx + subpoly_len] as i64);
+                let t1 = reduce::montgomery_reduce(t0);
+                p.coeffs[idx + subpoly_len] = p.coeffs[idx].wrapping_sub(t1);
+                p.coeffs[idx] = p.coeffs[idx].wrapping_add(t1);
             }
-            start = j + len;
         }
-        len >>= 1;
     }
+    debug_assert!(twiddles.next().is_none());
 }
 
 pub(crate) fn poly_invntt_tomont(p: &mut Poly) {
-    // TODO: Oxidize this function
-
     const MONT_R_I64: i64 = reduce::MONT_R as i64;
     const N_INV: i64 = reduce::modinverse(N as i64, Q as i64);
     const F: i64 = reduce::cmod(MONT_R_I64 * MONT_R_I64 * N_INV, Q as i64);
-    let mut k = 256;
-    let mut len = 1;
-    while len < N {
-        let mut j;
-        let mut start = 0;
-        while start < N {
-            k -= 1;
-            let zeta = -ZETAS[k] as i64;
-            j = start;
-            while j < start + len {
-                let t = p.coeffs[j];
-                p.coeffs[j] = t.wrapping_add(p.coeffs[j + len]);
-                let t = t.wrapping_sub(p.coeffs[j + len]);
-                p.coeffs[j + len] = reduce::montgomery_reduce(i64::from(t).wrapping_mul(zeta));
-                j += 1;
+
+    let mut twiddles = ZETAS.iter().rev();
+
+    for layer in (0..8).rev() {
+        let subpoly_len = 0x80 >> layer;
+        for subpoly_offset in (0..N).step_by(2*subpoly_len){
+            let zeta = -*twiddles.next().unwrap() as i64;
+            for idx in subpoly_offset..subpoly_offset + subpoly_len {
+                let t0 = p.coeffs[idx];
+                let t1 = t0.wrapping_sub(p.coeffs[idx + subpoly_len]);
+                let t2 = i64::from(t1).wrapping_mul(zeta);
+                p.coeffs[idx] = t0.wrapping_add(p.coeffs[idx + subpoly_len]);
+                p.coeffs[idx + subpoly_len] = reduce::montgomery_reduce(t2);
             }
-            start = j + len;
         }
-        len <<= 1;
     }
     for coeff in p.coeffs.iter_mut() {
         *coeff = reduce::montgomery_reduce(F.wrapping_mul(i64::from(*coeff)));
     }
+    debug_assert!(twiddles.next().is_none());
 }
 
 pub(crate) fn polyvec_ntt(vec: &mut [Poly]) {
@@ -143,6 +134,6 @@ mod tests {
     fn test_zetas() {
         assert_eq!(reduce::Q_INV, 58728449);
         assert_eq!(reduce::MONT_R, 4193792);
-        assert_eq!(&ZETAS[..], &ZETAS_REF[..]);
+        assert_eq!(&ZETAS[..], &ZETAS_REF[1..]);
     }
 }
