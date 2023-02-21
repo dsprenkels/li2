@@ -28,23 +28,158 @@ pub(crate) fn pack_sk(
     offset += SEEDBYTES;
 
     for poly in s1 {
-        polyeta_pack(p, &mut sk[offset..offset + p.polyeta_packedbytes], poly);
+        pack_poly_eta(p, &mut sk[offset..offset + p.polyeta_packedbytes], poly);
         offset += p.polyeta_packedbytes;
     }
 
     for poly in s2 {
-        polyeta_pack(p, &mut sk[offset..offset + p.polyeta_packedbytes], poly);
+        pack_poly_eta(p, &mut sk[offset..offset + p.polyeta_packedbytes], poly);
         offset += p.polyeta_packedbytes;
     }
 
     for poly in t0 {
-        polyt0_pack(p, &mut sk[offset..offset + p.polyt0_packedbytes], poly);
+        pack_poly_t0(p, &mut sk[offset..offset + p.polyt0_packedbytes], poly);
         offset += p.polyt0_packedbytes;
     }
     debug_assert_eq!(offset, p.secretkeybytes);
 }
 
-pub(crate) fn polyeta_pack(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Poly) {
+pub(crate) fn unpack_sk(
+    p: &DilithiumParams,
+    rho: &mut [u8],
+    tr: &mut [u8],
+    key: &mut [u8],
+    t0: &mut [poly::Poly],
+    s1: &mut [poly::Poly],
+    s2: &mut [poly::Poly],
+    sk: &[u8],
+) {
+    debug_assert_eq!(rho.len(), SEEDBYTES);
+    debug_assert_eq!(tr.len(), SEEDBYTES);
+    debug_assert_eq!(key.len(), SEEDBYTES);
+    debug_assert_eq!(t0.len(), p.k);
+    debug_assert_eq!(s1.len(), p.l);
+    debug_assert_eq!(s2.len(), p.k);
+    debug_assert_eq!(sk.len(), p.secretkeybytes);
+
+    let mut offset = 0;
+    rho.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+    key.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+    tr.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+
+    for poly in s1.iter_mut() {
+        unpack_poly_eta(p, poly, &sk[offset..offset + p.polyeta_packedbytes]);
+        offset += p.polyeta_packedbytes;
+    }
+    for poly in s2.iter_mut() {
+        unpack_poly_eta(p, poly, &sk[offset..offset + p.polyeta_packedbytes]);
+        offset += p.polyeta_packedbytes;
+    }
+    for poly in t0.iter_mut() {
+        unpack_poly_t0(p, poly, &sk[offset..offset + p.polyt0_packedbytes]);
+        offset += p.polyt0_packedbytes;
+    }
+
+    debug_assert_eq!(offset, p.secretkeybytes);
+}
+
+pub(crate) fn pack_pk(p: &DilithiumParams, pk: &mut [u8], rho: &[u8], t1: &[poly::Poly]) {
+    debug_assert_eq!(pk.len(), p.publickeybytes);
+    debug_assert_eq!(t1.len(), p.k);
+
+    let mut offset = 0;
+    (&mut pk[offset..offset + SEEDBYTES]).copy_from_slice(rho);
+    offset += SEEDBYTES;
+
+    for poly in t1 {
+        pack_poly_t1(p, &mut pk[offset..offset + p.polyt1_packedbytes], poly);
+        offset += p.polyt1_packedbytes;
+    }
+    debug_assert_eq!(offset, p.publickeybytes);
+}
+
+pub(crate) fn unpack_pk(p: &DilithiumParams, rho: &mut [u8], t1: &mut [poly::Poly], pk: &[u8]) {
+    debug_assert_eq!(pk.len(), p.publickeybytes);
+    debug_assert_eq!(t1.len(), p.k);
+
+    let mut offset = 0;
+    rho.copy_from_slice(&pk[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+
+    for poly in t1 {
+        unpack_poly_t1(p, poly, &pk[offset..offset + p.polyt1_packedbytes]);
+        offset += p.polyt1_packedbytes;
+    }
+    debug_assert_eq!(offset, p.publickeybytes);
+}
+
+pub(crate) fn pack_sig(
+    p: &DilithiumParams,
+    sig: &mut [u8],
+    c: &[u8],
+    z: &[poly::Poly],
+    h: &[poly::Poly],
+) {
+    debug_assert_eq!(sig.len(), p.sigbytes);
+    debug_assert_eq!(c.len(), SEEDBYTES);
+    debug_assert_eq!(z.len(), p.l);
+    debug_assert_eq!(h.len(), p.k);
+
+    let mut offset = 0;
+
+    // Output challenge
+    (&mut sig[offset..offset + SEEDBYTES]).copy_from_slice(c);
+    offset += SEEDBYTES;
+
+    // Output z
+    for poly in z {
+        pack_poly_z(p, &mut sig[offset..offset + p.polyz_packedbytes], poly);
+        offset += p.polyz_packedbytes;
+    }
+
+    // Output hints
+    pack_vec_hints(p, &mut sig[offset..offset + p.omega + p.k], h);
+    offset += p.omega + p.k;
+
+    debug_assert_eq!(offset, p.sigbytes);
+}
+
+pub(crate) fn unpack_sig(
+    p: &DilithiumParams,
+    c: &mut [u8],
+    z: &mut [poly::Poly],
+    h: &mut [poly::Poly],
+    sig: &[u8],
+) -> Result<(), crate::Error> {
+    debug_assert_eq!(c.len(), SEEDBYTES);
+    debug_assert_eq!(z.len(), p.l);
+    debug_assert_eq!(h.len(), p.k);
+    debug_assert_eq!(sig.len(), p.sigbytes);
+
+    let mut offset = 0;
+
+    // Load challenge
+    c.copy_from_slice(&sig[offset..offset + SEEDBYTES]);
+    offset += SEEDBYTES;
+
+    // Load z
+    for poly in z {
+        unpack_poly_z(p, poly, &sig[offset..offset + p.polyz_packedbytes]);
+        offset += p.polyz_packedbytes;
+    }
+
+    // Load hints
+    unpack_vec_hints(p, h, &sig[offset..offset + p.omega + p.k])?;
+    offset += p.omega + p.k;
+
+    debug_assert_eq!(offset, p.sigbytes);
+    Ok(())
+}
+
+pub(crate) fn pack_poly_eta(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Poly) {
     debug_assert_eq!(sk.len(), p.polyeta_packedbytes);
 
     if p.eta == 2 {
@@ -76,235 +211,7 @@ pub(crate) fn polyeta_pack(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Poly
     }
 }
 
-pub(crate) fn polyt0_pack(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Poly) {
-    debug_assert_eq!(sk.len(), p.polyt0_packedbytes);
-
-    let sk_chunks = sk.chunks_exact_mut(13);
-    let poly_chunks = poly.coeffs.chunks_exact(8);
-    for (sk_chunk, poly_chunk) in Iterator::zip(sk_chunks, poly_chunks) {
-        let t0 = (1 << (D - 1)) - poly_chunk[0];
-        let t1 = (1 << (D - 1)) - poly_chunk[1];
-        let t2 = (1 << (D - 1)) - poly_chunk[2];
-        let t3 = (1 << (D - 1)) - poly_chunk[3];
-        let t4 = (1 << (D - 1)) - poly_chunk[4];
-        let t5 = (1 << (D - 1)) - poly_chunk[5];
-        let t6 = (1 << (D - 1)) - poly_chunk[6];
-        let t7 = (1 << (D - 1)) - poly_chunk[7];
-
-        sk_chunk[0] = (t0) as u8;
-        sk_chunk[1] = (t0 >> 8) as u8;
-        sk_chunk[1] |= (t1 << 5) as u8;
-        sk_chunk[2] = (t1 >> 3) as u8;
-        sk_chunk[3] = (t1 >> 11) as u8;
-        sk_chunk[3] |= (t2 << 2) as u8;
-        sk_chunk[4] = (t2 >> 6) as u8;
-        sk_chunk[4] |= (t3 << 7) as u8;
-        sk_chunk[5] = (t3 >> 1) as u8;
-        sk_chunk[6] = (t3 >> 9) as u8;
-        sk_chunk[6] |= (t4 << 4) as u8;
-        sk_chunk[7] = (t4 >> 4) as u8;
-        sk_chunk[8] = (t4 >> 12) as u8;
-        sk_chunk[8] |= (t5 << 1) as u8;
-        sk_chunk[9] = (t5 >> 7) as u8;
-        sk_chunk[9] |= (t6 << 6) as u8;
-        sk_chunk[10] = (t6 >> 2) as u8;
-        sk_chunk[11] = (t6 >> 10) as u8;
-        sk_chunk[11] |= (t7 << 3) as u8;
-        sk_chunk[12] = (t7 >> 5) as u8;
-    }
-}
-
-pub(crate) fn pack_pk(p: &DilithiumParams, pk: &mut [u8], rho: &[u8], t1: &[poly::Poly]) {
-    debug_assert_eq!(pk.len(), p.publickeybytes);
-    debug_assert_eq!(t1.len(), p.k);
-
-    let mut offset = 0;
-    (&mut pk[offset..offset + SEEDBYTES]).copy_from_slice(rho);
-    offset += SEEDBYTES;
-
-    for poly in t1 {
-        polyt1_pack(p, &mut pk[offset..offset + p.polyt1_packedbytes], poly);
-        offset += p.polyt1_packedbytes;
-    }
-    debug_assert_eq!(offset, p.publickeybytes);
-}
-
-pub(crate) fn unpack_pk(p: &DilithiumParams, rho: &mut [u8], t1: &mut [poly::Poly], pk: &[u8]) {
-    debug_assert_eq!(pk.len(), p.publickeybytes);
-    debug_assert_eq!(t1.len(), p.k);
-
-    let mut offset = 0;
-    rho.copy_from_slice(&pk[offset..offset + SEEDBYTES]);
-    offset += SEEDBYTES;
-
-    for poly in t1 {
-        polyt1_unpack(p, poly, &pk[offset..offset + p.polyt1_packedbytes]);
-        offset += p.polyt1_packedbytes;
-    }
-    debug_assert_eq!(offset, p.publickeybytes);
-}
-
-pub(crate) fn polyt1_pack(p: &DilithiumParams, pk: &mut [u8], poly: &poly::Poly) {
-    debug_assert_eq!(pk.len(), p.polyt1_packedbytes);
-
-    let pk_chunks = pk.chunks_exact_mut(5);
-    let poly_chunks = poly.coeffs.chunks_exact(4);
-    for (pk_chunk, poly_chunk) in Iterator::zip(pk_chunks, poly_chunks) {
-        pk_chunk[0] = (poly_chunk[0] >> 0) as u8;
-        pk_chunk[1] = ((poly_chunk[0] >> 8) | (poly_chunk[1] << 2)) as u8;
-        pk_chunk[2] = ((poly_chunk[1] >> 6) | (poly_chunk[2] << 4)) as u8;
-        pk_chunk[3] = ((poly_chunk[2] >> 4) | (poly_chunk[3] << 6)) as u8;
-        pk_chunk[4] = (poly_chunk[3] >> 2) as u8;
-    }
-}
-
-pub(crate) fn polyt1_unpack(p: &DilithiumParams, poly: &mut poly::Poly, pk: &[u8]) {
-    debug_assert_eq!(pk.len(), p.polyt1_packedbytes);
-
-    let poly_chunks = poly.coeffs.chunks_exact_mut(4);
-    let pk_chunks = pk.chunks_exact(5);
-    for (poly_chunk, pk_chunk) in Iterator::zip(poly_chunks, pk_chunks) {
-        poly_chunk[0] = (((pk_chunk[0] as u32 >> 0) | ((pk_chunk[1] as u32) << 8)) & 0x3FF) as i32;
-        poly_chunk[1] = (((pk_chunk[1] as u32 >> 2) | ((pk_chunk[2] as u32) << 6)) & 0x3FF) as i32;
-        poly_chunk[2] = (((pk_chunk[2] as u32 >> 4) | ((pk_chunk[3] as u32) << 4)) & 0x3FF) as i32;
-        poly_chunk[3] = (((pk_chunk[3] as u32 >> 6) | ((pk_chunk[4] as u32) << 2)) & 0x3FF) as i32;
-    }
-}
-
-pub(crate) fn polyvec_pack_w1(p: &DilithiumParams, w1packed: &mut [u8], w1: &[poly::Poly]) {
-    debug_assert_eq!(w1packed.len(), p.k * p.polyw1_packedbytes);
-    let mut offset = 0;
-    for poly in w1 {
-        polyw1_pack(
-            p,
-            &mut w1packed[offset..offset + p.polyw1_packedbytes],
-            poly,
-        );
-        offset += p.polyw1_packedbytes;
-    }
-    debug_assert_eq!(offset, p.k * p.polyw1_packedbytes);
-}
-
-pub(crate) fn polyw1_pack(p: &DilithiumParams, w1packed: &mut [u8], poly: &poly::Poly) {
-    debug_assert_eq!(w1packed.len(), p.polyw1_packedbytes);
-
-    if p.gamma2 == (Q - 1) / 88 {
-        let w1packed_chunks = w1packed.chunks_exact_mut(3);
-        let poly_chunks = poly.coeffs.chunks_exact(4);
-        for (w1packed_chunk, poly_chunk) in Iterator::zip(w1packed_chunks, poly_chunks) {
-            w1packed_chunk[0] = (poly_chunk[0]) as u8;
-            w1packed_chunk[0] |= (poly_chunk[1] << 6) as u8;
-            w1packed_chunk[1] = (poly_chunk[1] >> 2) as u8;
-            w1packed_chunk[1] |= (poly_chunk[2] << 4) as u8;
-            w1packed_chunk[2] = (poly_chunk[2] >> 4) as u8;
-            w1packed_chunk[2] |= (poly_chunk[3] << 2) as u8;
-        }
-    } else if p.gamma2 == (Q - 1) / 32 {
-        let poly_chunks = poly.coeffs.chunks_exact(2);
-        for (w1packed_byte, poly_chunk) in Iterator::zip(w1packed.iter_mut(), poly_chunks) {
-            *w1packed_byte = (poly_chunk[0] | (poly_chunk[1] << 4)) as u8;
-        }
-    } else {
-        unreachable!("invalid GAMMA2 value ({})", p.gamma2);
-    }
-}
-
-pub(crate) fn polyz_unpack(p: &DilithiumParams, poly: &mut poly::Poly, zpacked: &[u8]) {
-    assert_eq!(zpacked.len(), p.polyz_packedbytes);
-    if p.gamma1 == 2i32.pow(17) {
-        let dest = poly.coeffs.chunks_exact_mut(4);
-        let src = zpacked.chunks_exact(9);
-        for (poly_chunk, zpacked_chunk) in Iterator::zip(dest, src) {
-            poly_chunk[0] = zpacked_chunk[0] as i32;
-            poly_chunk[0] |= (zpacked_chunk[1] as i32) << 8;
-            poly_chunk[0] |= (zpacked_chunk[2] as i32) << 16;
-            poly_chunk[0] &= 0x3FFFF;
-
-            poly_chunk[1] = (zpacked_chunk[2] as i32) >> 2;
-            poly_chunk[1] |= (zpacked_chunk[3] as i32) << 6;
-            poly_chunk[1] |= (zpacked_chunk[4] as i32) << 14;
-            poly_chunk[1] &= 0x3FFFF;
-
-            poly_chunk[2] = (zpacked_chunk[4] as i32) >> 4;
-            poly_chunk[2] |= (zpacked_chunk[5] as i32) << 4;
-            poly_chunk[2] |= (zpacked_chunk[6] as i32) << 12;
-            poly_chunk[2] &= 0x3FFFF;
-
-            poly_chunk[3] = (zpacked_chunk[6] as i32) >> 6;
-            poly_chunk[3] |= (zpacked_chunk[7] as i32) << 2;
-            poly_chunk[3] |= (zpacked_chunk[8] as i32) << 10;
-            poly_chunk[3] &= 0x3FFFF;
-
-            poly_chunk[0] = p.gamma1 - poly_chunk[0];
-            poly_chunk[1] = p.gamma1 - poly_chunk[1];
-            poly_chunk[2] = p.gamma1 - poly_chunk[2];
-            poly_chunk[3] = p.gamma1 - poly_chunk[3];
-        }
-    } else if p.gamma1 == 2i32.pow(19) {
-        let dest = poly.coeffs.chunks_exact_mut(2);
-        let src = zpacked.chunks_exact(5);
-        for (poly_chunk, zpacked_chunk) in Iterator::zip(dest, src) {
-            poly_chunk[0] = zpacked_chunk[0] as i32;
-            poly_chunk[0] |= (zpacked_chunk[1] as i32) << 8;
-            poly_chunk[0] |= (zpacked_chunk[2] as i32) << 16;
-            poly_chunk[0] &= 0xFFFFF;
-
-            poly_chunk[1] = (zpacked_chunk[2] as i32) >> 4;
-            poly_chunk[1] |= (zpacked_chunk[3] as i32) << 4;
-            poly_chunk[1] |= (zpacked_chunk[4] as i32) << 12;
-            poly_chunk[0] &= 0xFFFFF;
-
-            poly_chunk[0] = p.gamma1 - poly_chunk[0];
-            poly_chunk[1] = p.gamma1 - poly_chunk[1];
-        }
-    } else {
-        unreachable!("invalid GAMMA1 value ({})", p.gamma1);
-    }
-}
-
-pub(crate) fn unpack_sk(
-    p: &DilithiumParams,
-    rho: &mut [u8],
-    tr: &mut [u8],
-    key: &mut [u8],
-    t0: &mut [poly::Poly],
-    s1: &mut [poly::Poly],
-    s2: &mut [poly::Poly],
-    sk: &[u8],
-) {
-    debug_assert_eq!(rho.len(), SEEDBYTES);
-    debug_assert_eq!(tr.len(), SEEDBYTES);
-    debug_assert_eq!(key.len(), SEEDBYTES);
-    debug_assert_eq!(t0.len(), p.k);
-    debug_assert_eq!(s1.len(), p.l);
-    debug_assert_eq!(s2.len(), p.k);
-    debug_assert_eq!(sk.len(), p.secretkeybytes);
-
-    let mut offset = 0;
-    rho.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
-    offset += SEEDBYTES;
-    key.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
-    offset += SEEDBYTES;
-    tr.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
-    offset += SEEDBYTES;
-
-    for poly in s1.iter_mut() {
-        polyeta_unpack(p, poly, &sk[offset..offset + p.polyeta_packedbytes]);
-        offset += p.polyeta_packedbytes;
-    }
-    for poly in s2.iter_mut() {
-        polyeta_unpack(p, poly, &sk[offset..offset + p.polyeta_packedbytes]);
-        offset += p.polyeta_packedbytes;
-    }
-    for poly in t0.iter_mut() {
-        polyt0_unpack(p, poly, &sk[offset..offset + p.polyt0_packedbytes]);
-        offset += p.polyt0_packedbytes;
-    }
-
-    debug_assert_eq!(offset, p.secretkeybytes);
-}
-
-pub(crate) fn polyeta_unpack(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
+pub(crate) fn unpack_poly_eta(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
     debug_assert_eq!(packed.len(), p.polyeta_packedbytes);
 
     if p.eta == 2 {
@@ -343,7 +250,45 @@ pub(crate) fn polyeta_unpack(p: &DilithiumParams, poly: &mut poly::Poly, packed:
     }
 }
 
-pub(crate) fn polyt0_unpack(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
+pub(crate) fn pack_poly_t0(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Poly) {
+    debug_assert_eq!(sk.len(), p.polyt0_packedbytes);
+
+    let sk_chunks = sk.chunks_exact_mut(13);
+    let poly_chunks = poly.coeffs.chunks_exact(8);
+    for (sk_chunk, poly_chunk) in Iterator::zip(sk_chunks, poly_chunks) {
+        let t0 = (1 << (D - 1)) - poly_chunk[0];
+        let t1 = (1 << (D - 1)) - poly_chunk[1];
+        let t2 = (1 << (D - 1)) - poly_chunk[2];
+        let t3 = (1 << (D - 1)) - poly_chunk[3];
+        let t4 = (1 << (D - 1)) - poly_chunk[4];
+        let t5 = (1 << (D - 1)) - poly_chunk[5];
+        let t6 = (1 << (D - 1)) - poly_chunk[6];
+        let t7 = (1 << (D - 1)) - poly_chunk[7];
+
+        sk_chunk[0] = (t0) as u8;
+        sk_chunk[1] = (t0 >> 8) as u8;
+        sk_chunk[1] |= (t1 << 5) as u8;
+        sk_chunk[2] = (t1 >> 3) as u8;
+        sk_chunk[3] = (t1 >> 11) as u8;
+        sk_chunk[3] |= (t2 << 2) as u8;
+        sk_chunk[4] = (t2 >> 6) as u8;
+        sk_chunk[4] |= (t3 << 7) as u8;
+        sk_chunk[5] = (t3 >> 1) as u8;
+        sk_chunk[6] = (t3 >> 9) as u8;
+        sk_chunk[6] |= (t4 << 4) as u8;
+        sk_chunk[7] = (t4 >> 4) as u8;
+        sk_chunk[8] = (t4 >> 12) as u8;
+        sk_chunk[8] |= (t5 << 1) as u8;
+        sk_chunk[9] = (t5 >> 7) as u8;
+        sk_chunk[9] |= (t6 << 6) as u8;
+        sk_chunk[10] = (t6 >> 2) as u8;
+        sk_chunk[11] = (t6 >> 10) as u8;
+        sk_chunk[11] |= (t7 << 3) as u8;
+        sk_chunk[12] = (t7 >> 5) as u8;
+    }
+}
+
+pub(crate) fn unpack_poly_t0(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
     debug_assert_eq!(packed.len(), p.polyt0_packedbytes);
 
     let dest = poly.coeffs.chunks_exact_mut(8);
@@ -411,104 +356,69 @@ pub(crate) fn polyt0_unpack(p: &DilithiumParams, poly: &mut poly::Poly, packed: 
     }
 }
 
-pub(crate) fn pack_sig(
-    p: &DilithiumParams,
-    sig: &mut [u8],
-    c: &[u8],
-    z: &[poly::Poly],
-    h: &[poly::Poly],
-) {
-    debug_assert_eq!(sig.len(), p.sigbytes);
-    debug_assert_eq!(c.len(), SEEDBYTES);
-    debug_assert_eq!(z.len(), p.l);
-    debug_assert_eq!(h.len(), p.k);
+pub(crate) fn pack_poly_t1(p: &DilithiumParams, pk: &mut [u8], poly: &poly::Poly) {
+    debug_assert_eq!(pk.len(), p.polyt1_packedbytes);
 
+    let pk_chunks = pk.chunks_exact_mut(5);
+    let poly_chunks = poly.coeffs.chunks_exact(4);
+    for (pk_chunk, poly_chunk) in Iterator::zip(pk_chunks, poly_chunks) {
+        pk_chunk[0] = (poly_chunk[0] >> 0) as u8;
+        pk_chunk[1] = ((poly_chunk[0] >> 8) | (poly_chunk[1] << 2)) as u8;
+        pk_chunk[2] = ((poly_chunk[1] >> 6) | (poly_chunk[2] << 4)) as u8;
+        pk_chunk[3] = ((poly_chunk[2] >> 4) | (poly_chunk[3] << 6)) as u8;
+        pk_chunk[4] = (poly_chunk[3] >> 2) as u8;
+    }
+}
+
+pub(crate) fn unpack_poly_t1(p: &DilithiumParams, poly: &mut poly::Poly, pk: &[u8]) {
+    debug_assert_eq!(pk.len(), p.polyt1_packedbytes);
+
+    let poly_chunks = poly.coeffs.chunks_exact_mut(4);
+    let pk_chunks = pk.chunks_exact(5);
+    for (poly_chunk, pk_chunk) in Iterator::zip(poly_chunks, pk_chunks) {
+        poly_chunk[0] = (((pk_chunk[0] as u32 >> 0) | ((pk_chunk[1] as u32) << 8)) & 0x3FF) as i32;
+        poly_chunk[1] = (((pk_chunk[1] as u32 >> 2) | ((pk_chunk[2] as u32) << 6)) & 0x3FF) as i32;
+        poly_chunk[2] = (((pk_chunk[2] as u32 >> 4) | ((pk_chunk[3] as u32) << 4)) & 0x3FF) as i32;
+        poly_chunk[3] = (((pk_chunk[3] as u32 >> 6) | ((pk_chunk[4] as u32) << 2)) & 0x3FF) as i32;
+    }
+}
+
+pub(crate) fn pack_polyvec_w1(p: &DilithiumParams, w1packed: &mut [u8], w1: &[poly::Poly]) {
+    debug_assert_eq!(w1packed.len(), p.k * p.polyw1_packedbytes);
     let mut offset = 0;
-
-    // Output challenge
-    (&mut sig[offset..offset + SEEDBYTES]).copy_from_slice(c);
-    offset += SEEDBYTES;
-
-    // Output z
-    for poly in z {
-        polyz_pack(p, &mut sig[offset..offset + p.polyz_packedbytes], poly);
-        offset += p.polyz_packedbytes;
+    for poly in w1 {
+        let poly_bytes = &mut w1packed[offset..offset + p.polyw1_packedbytes];
+        pack_poly_w1(p, poly_bytes, poly);
+        offset += p.polyw1_packedbytes;
     }
-
-    // Output hints
-    pack_hints(p, &mut sig[offset..offset + p.omega + p.k], h);
-    offset += p.omega + p.k;
-
-    debug_assert_eq!(offset, p.sigbytes);
+    debug_assert_eq!(offset, p.k * p.polyw1_packedbytes);
 }
 
-pub(crate) fn unpack_sig(
-    p: &DilithiumParams,
-    c: &mut [u8],
-    z: &mut [poly::Poly],
-    h: &mut [poly::Poly],
-    sig: &[u8],
-) -> Result<(), crate::Error> {
-    debug_assert_eq!(c.len(), SEEDBYTES);
-    debug_assert_eq!(z.len(), p.l);
-    debug_assert_eq!(h.len(), p.k);
-    debug_assert_eq!(sig.len(), p.sigbytes);
+pub(crate) fn pack_poly_w1(p: &DilithiumParams, w1packed: &mut [u8], poly: &poly::Poly) {
+    debug_assert_eq!(w1packed.len(), p.polyw1_packedbytes);
 
-    let mut offset = 0;
-
-    // Load challenge
-    c.copy_from_slice(&sig[offset..offset + SEEDBYTES]);
-    offset += SEEDBYTES;
-
-    // Load z
-    for poly in z {
-        polyz_unpack(p, poly, &sig[offset..offset + p.polyz_packedbytes]);
-        offset += p.polyz_packedbytes;
-    }
-
-    // Load hints
-    unpack_hints(p, h, &sig[offset..offset + p.omega + p.k])?;
-    offset += p.omega + p.k;
-
-    debug_assert_eq!(offset, p.sigbytes);
-    Ok(())
-}
-
-fn unpack_hints(p: &DilithiumParams, h: &mut [poly::Poly], sig: &[u8]) -> Result<(), crate::Error> {
-    debug_assert_eq!(h.len(), p.k);
-    debug_assert_eq!(sig.len(), p.omega + p.k);
-
-    let mut offset = 0usize;
-    for (poly_idx, poly) in h.iter_mut().enumerate() {
-        let hints_start = offset;
-        let hints_end = sig[p.omega + poly_idx] as usize;
-        if hints_end < hints_start || hints_end > p.omega {
-            return Err(crate::Error::InvalidSignature);
+    if p.gamma2 == (Q - 1) / 88 {
+        let w1packed_chunks = w1packed.chunks_exact_mut(3);
+        let poly_chunks = poly.coeffs.chunks_exact(4);
+        for (w1packed_chunk, poly_chunk) in Iterator::zip(w1packed_chunks, poly_chunks) {
+            w1packed_chunk[0] = (poly_chunk[0]) as u8;
+            w1packed_chunk[0] |= (poly_chunk[1] << 6) as u8;
+            w1packed_chunk[1] = (poly_chunk[1] >> 2) as u8;
+            w1packed_chunk[1] |= (poly_chunk[2] << 4) as u8;
+            w1packed_chunk[2] = (poly_chunk[2] >> 4) as u8;
+            w1packed_chunk[2] |= (poly_chunk[3] << 2) as u8;
         }
-
-        for sig_idx in hints_start..hints_end {
-            let coeff_idx = sig[sig_idx] as usize;
-            if sig_idx > hints_start {
-                // Assert that the coefficients are ordered for strong unforgeability
-                let prev_coeff_idx = sig[sig_idx - 1] as usize;
-                if !(prev_coeff_idx < coeff_idx) {
-                    return Err(crate::Error::InvalidSignature);
-                }
-            }
-            poly.coeffs[coeff_idx] = 1;
+    } else if p.gamma2 == (Q - 1) / 32 {
+        let poly_chunks = poly.coeffs.chunks_exact(2);
+        for (w1packed_byte, poly_chunk) in Iterator::zip(w1packed.iter_mut(), poly_chunks) {
+            *w1packed_byte = (poly_chunk[0] | (poly_chunk[1] << 4)) as u8;
         }
-        offset = hints_end;
+    } else {
+        unreachable!("invalid GAMMA2 value ({})", p.gamma2);
     }
-
-    // Assert that the rest of the signature is zeroed
-    if !sig[offset..p.omega].iter().all(|b| *b == 0) {
-        return Err(crate::Error::InvalidSignature);
-    }
-
-    Ok(())
 }
 
-pub(crate) fn polyz_pack(p: &DilithiumParams, packed: &mut [u8], poly: &poly::Poly) {
+pub(crate) fn pack_poly_z(p: &DilithiumParams, packed: &mut [u8], poly: &poly::Poly) {
     debug_assert_eq!(packed.len(), p.polyz_packedbytes);
 
     if p.gamma1 == 2i32.pow(17) {
@@ -552,7 +462,94 @@ pub(crate) fn polyz_pack(p: &DilithiumParams, packed: &mut [u8], poly: &poly::Po
     }
 }
 
-pub(crate) fn pack_hints(p: &DilithiumParams, hints_packed: &mut [u8], h: &[poly::Poly]) {
+pub(crate) fn unpack_poly_z(p: &DilithiumParams, poly: &mut poly::Poly, zpacked: &[u8]) {
+    assert_eq!(zpacked.len(), p.polyz_packedbytes);
+    if p.gamma1 == 2i32.pow(17) {
+        let dest = poly.coeffs.chunks_exact_mut(4);
+        let src = zpacked.chunks_exact(9);
+        for (poly_chunk, zpacked_chunk) in Iterator::zip(dest, src) {
+            poly_chunk[0] = zpacked_chunk[0] as i32;
+            poly_chunk[0] |= (zpacked_chunk[1] as i32) << 8;
+            poly_chunk[0] |= (zpacked_chunk[2] as i32) << 16;
+            poly_chunk[0] &= 0x3FFFF;
+
+            poly_chunk[1] = (zpacked_chunk[2] as i32) >> 2;
+            poly_chunk[1] |= (zpacked_chunk[3] as i32) << 6;
+            poly_chunk[1] |= (zpacked_chunk[4] as i32) << 14;
+            poly_chunk[1] &= 0x3FFFF;
+
+            poly_chunk[2] = (zpacked_chunk[4] as i32) >> 4;
+            poly_chunk[2] |= (zpacked_chunk[5] as i32) << 4;
+            poly_chunk[2] |= (zpacked_chunk[6] as i32) << 12;
+            poly_chunk[2] &= 0x3FFFF;
+
+            poly_chunk[3] = (zpacked_chunk[6] as i32) >> 6;
+            poly_chunk[3] |= (zpacked_chunk[7] as i32) << 2;
+            poly_chunk[3] |= (zpacked_chunk[8] as i32) << 10;
+            poly_chunk[3] &= 0x3FFFF;
+
+            poly_chunk[0] = p.gamma1 - poly_chunk[0];
+            poly_chunk[1] = p.gamma1 - poly_chunk[1];
+            poly_chunk[2] = p.gamma1 - poly_chunk[2];
+            poly_chunk[3] = p.gamma1 - poly_chunk[3];
+        }
+    } else if p.gamma1 == 2i32.pow(19) {
+        let dest = poly.coeffs.chunks_exact_mut(2);
+        let src = zpacked.chunks_exact(5);
+        for (poly_chunk, zpacked_chunk) in Iterator::zip(dest, src) {
+            poly_chunk[0] = zpacked_chunk[0] as i32;
+            poly_chunk[0] |= (zpacked_chunk[1] as i32) << 8;
+            poly_chunk[0] |= (zpacked_chunk[2] as i32) << 16;
+            poly_chunk[0] &= 0xFFFFF;
+
+            poly_chunk[1] = (zpacked_chunk[2] as i32) >> 4;
+            poly_chunk[1] |= (zpacked_chunk[3] as i32) << 4;
+            poly_chunk[1] |= (zpacked_chunk[4] as i32) << 12;
+            poly_chunk[0] &= 0xFFFFF;
+
+            poly_chunk[0] = p.gamma1 - poly_chunk[0];
+            poly_chunk[1] = p.gamma1 - poly_chunk[1];
+        }
+    } else {
+        unreachable!("invalid GAMMA1 value ({})", p.gamma1);
+    }
+}
+
+fn unpack_vec_hints(p: &DilithiumParams, h: &mut [poly::Poly], sig: &[u8]) -> Result<(), crate::Error> {
+    debug_assert_eq!(h.len(), p.k);
+    debug_assert_eq!(sig.len(), p.omega + p.k);
+
+    let mut offset = 0usize;
+    for (poly_idx, poly) in h.iter_mut().enumerate() {
+        let hints_start = offset;
+        let hints_end = sig[p.omega + poly_idx] as usize;
+        if hints_end < hints_start || hints_end > p.omega {
+            return Err(crate::Error::InvalidSignature);
+        }
+
+        for sig_idx in hints_start..hints_end {
+            let coeff_idx = sig[sig_idx] as usize;
+            if sig_idx > hints_start {
+                // Assert that the coefficients are ordered for strong unforgeability
+                let prev_coeff_idx = sig[sig_idx - 1] as usize;
+                if !(prev_coeff_idx < coeff_idx) {
+                    return Err(crate::Error::InvalidSignature);
+                }
+            }
+            poly.coeffs[coeff_idx] = 1;
+        }
+        offset = hints_end;
+    }
+
+    // Assert that the rest of the signature is zeroed
+    if !sig[offset..p.omega].iter().all(|b| *b == 0) {
+        return Err(crate::Error::InvalidSignature);
+    }
+
+    Ok(())
+}
+
+pub(crate) fn pack_vec_hints(p: &DilithiumParams, hints_packed: &mut [u8], h: &[poly::Poly]) {
     debug_assert_eq!(hints_packed.len(), p.omega + p.k);
     debug_assert_eq!(h.len(), p.k);
 

@@ -390,7 +390,7 @@ fn dilithium_signature(
         // Decompose w and call the random oracle
         poly::polyvec_pointwise(&mut mem.w1, crate::reduce::caddq);
         poly::polyveck_decompose(p, &mut mem.w1, &mut mem.w0);
-        packing::polyvec_pack_w1(p, &mut mem.sigbytes[0..p.k * p.polyw1_packedbytes], &mem.w1);
+        packing::pack_polyvec_w1(p, &mut mem.sigbytes[0..p.k * p.polyw1_packedbytes], &mem.w1);
 
         // Compute challenge
         let mut xof = keccak::SHAKE256::new(mem.keccak);
@@ -609,7 +609,7 @@ fn dilithium_verify(
     // Reconstruct w1
     poly::polyvec_pointwise(&mut *mem.w1, crate::reduce::caddq);
     poly::polyvec_use_hint(p, &mut *mem.w1, &*mem.h);
-    packing::polyvec_pack_w1(p, mem.buf, &*mem.w1);
+    packing::pack_polyvec_w1(p, mem.buf, &*mem.w1);
 
     // Call random oracle and verify challenge
     let mut xof = keccak::SHAKE256::new(mem.keccak);

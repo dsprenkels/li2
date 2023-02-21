@@ -37,5 +37,5 @@ pub(crate) fn poly_uniform_gamma1(
     xof.update(&nonce.to_le_bytes());
     let mut xofread = xof.finalize_xof();
     xofread.read(&mut buf[0..buf_len]);
-    crate::packing::polyz_unpack(p, y_elem, &buf[0..buf_len]);
+    crate::packing::unpack_poly_z(p, y_elem, &buf[0..buf_len]);
 }
