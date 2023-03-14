@@ -1,3 +1,8 @@
+#![allow(
+    clippy::identity_op,
+    clippy::too_many_arguments,
+    clippy::mut_range_bound
+)]
 #![warn(
     clippy::mod_module_files,
     clippy::unwrap_used,
@@ -9,21 +14,7 @@
 )]
 #![no_std]
 
-#[derive(Debug, Clone)]
-#[non_exhaustive]
-pub enum Error {
-    InternalError,
-    InvalidSignature,
-}
-
-impl core::fmt::Display for Error {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Error::InternalError => write!(f, "internal error"),
-            Error::InvalidSignature => write!(f, "invalid signature"),
-        }
-    }
-}
+pub type Error = signature::Error;
 
 // TODO: Reorganize all of the modules
 mod api;
@@ -40,4 +31,7 @@ mod poly;
 mod reduce;
 mod rounding;
 
-pub use api::{Dilithium2, Dilithium3, Dilithium5, DilithiumVariant};
+pub use digest::Digest;
+pub use signature::{Signer, Verifier};
+
+pub use api::{dilithium2, dilithium3, dilithium5};

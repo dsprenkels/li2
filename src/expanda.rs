@@ -12,7 +12,7 @@ pub(crate) fn polyvec_matrix_expand(
     for i in 0..p.k {
         for j in 0..p.l {
             let nonce = ((i as u16) << 8) | j as u16;
-            poly_uniform(&p, keccak, &mut mat[idx], rho, nonce);
+            poly_uniform(p, keccak, &mut mat[idx], rho, nonce);
             idx += 1;
         }
     }

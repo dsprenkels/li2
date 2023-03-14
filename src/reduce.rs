@@ -42,8 +42,7 @@ pub(crate) const fn montgomery_reduce(a: i64) -> i32 {
 pub(crate) const fn reduce32(a: i32) -> i32 {
     let t = a.wrapping_add(1 << 22);
     let t = t >> 23;
-    let t = a - t * Q;
-    t
+    a - t * Q
 }
 
 pub(crate) fn caddq(mut a: i32) -> i32 {

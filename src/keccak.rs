@@ -410,7 +410,7 @@ fn keccak_init(s: &mut [u64; 25]) {
 fn keccak_absorb(s: &mut [u64; 25], mut pos: usize, rate: usize, mut input: &[u8]) -> usize {
     while pos + input.len() >= rate {
         for i in pos..rate {
-            s[i / 8] ^= u64::from(input[0]) << 8 * (i % 8);
+            s[i / 8] ^= u64::from(input[0]) << (8 * (i % 8));
             input = &input[1..];
             pos += 1;
         }
@@ -419,7 +419,7 @@ fn keccak_absorb(s: &mut [u64; 25], mut pos: usize, rate: usize, mut input: &[u8
     }
 
     for i in pos..pos + input.len() {
-        s[i / 8] ^= u64::from(input[0]) << 8 * (i % 8);
+        s[i / 8] ^= u64::from(input[0]) << (8 * (i % 8));
         input = &input[1..];
         pos += 1;
     }
@@ -429,12 +429,12 @@ fn keccak_absorb(s: &mut [u64; 25], mut pos: usize, rate: usize, mut input: &[u8
 }
 
 fn keccak_finalize(s: &mut [u64; 25], pos: usize, rate: usize, ds: u8) {
-    s[pos / 8] ^= u64::from(ds) << 8 * (pos % 8);
+    s[pos / 8] ^= u64::from(ds) << (8 * (pos % 8));
     s[rate / 8 - 1] ^= 1 << 63;
 }
 
 fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: usize) -> usize {
-    while out.len() > 0 {
+    while !out.is_empty() {
         if pos == rate {
             KeccakF1600_StatePermute(s);
             pos = 0;

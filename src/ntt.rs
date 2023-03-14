@@ -44,7 +44,7 @@ pub(crate) fn poly_ntt(p: &mut Poly) {
     for layer in 0..8 {
         let subpoly_len = 0x80 >> layer;
         for subpoly_offset in (0..N).step_by(2 * subpoly_len) {
-            let zeta = *twiddles.next().unwrap() as i64;
+            let zeta = *twiddles.next().expect("twiddle index error") as i64;
             for idx in subpoly_offset..subpoly_offset + subpoly_len {
                 let t0 = zeta.wrapping_mul(p.coeffs[idx + subpoly_len] as i64);
                 let t1 = reduce::montgomery_reduce(t0);
@@ -65,8 +65,8 @@ pub(crate) fn poly_invntt_tomont(p: &mut Poly) {
 
     for layer in (0..8).rev() {
         let subpoly_len = 0x80 >> layer;
-        for subpoly_offset in (0..N).step_by(2*subpoly_len){
-            let zeta = -*twiddles.next().unwrap() as i64;
+        for subpoly_offset in (0..N).step_by(2 * subpoly_len) {
+            let zeta = -*twiddles.next().expect("twiddle index") as i64;
             for idx in subpoly_offset..subpoly_offset + subpoly_len {
                 let t0 = p.coeffs[idx];
                 let t1 = t0.wrapping_sub(p.coeffs[idx + subpoly_len]);

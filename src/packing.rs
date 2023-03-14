@@ -20,11 +20,11 @@ pub(crate) fn pack_sk(
     debug_assert_eq!(s2.len(), p.k);
 
     let mut offset = 0;
-    (&mut sk[offset..offset + SEEDBYTES]).copy_from_slice(rho);
+    sk[offset..offset + SEEDBYTES].copy_from_slice(rho);
     offset += SEEDBYTES;
-    (&mut sk[offset..offset + SEEDBYTES]).copy_from_slice(key);
+    sk[offset..offset + SEEDBYTES].copy_from_slice(key);
     offset += SEEDBYTES;
-    (&mut sk[offset..offset + SEEDBYTES]).copy_from_slice(tr);
+    sk[offset..offset + SEEDBYTES].copy_from_slice(tr);
     offset += SEEDBYTES;
 
     for poly in s1 {
@@ -91,7 +91,7 @@ pub(crate) fn pack_pk(p: &DilithiumParams, pk: &mut [u8], rho: &[u8], t1: &[poly
     debug_assert_eq!(t1.len(), p.k);
 
     let mut offset = 0;
-    (&mut pk[offset..offset + SEEDBYTES]).copy_from_slice(rho);
+    pk[offset..offset + SEEDBYTES].copy_from_slice(rho);
     offset += SEEDBYTES;
 
     for poly in t1 {
@@ -131,7 +131,7 @@ pub(crate) fn pack_sig(
     let mut offset = 0;
 
     // Output challenge
-    (&mut sig[offset..offset + SEEDBYTES]).copy_from_slice(c);
+    sig[offset..offset + SEEDBYTES].copy_from_slice(c);
     offset += SEEDBYTES;
 
     // Output z
@@ -515,7 +515,11 @@ pub(crate) fn unpack_poly_z(p: &DilithiumParams, poly: &mut poly::Poly, zpacked:
     }
 }
 
-fn unpack_vec_hints(p: &DilithiumParams, h: &mut [poly::Poly], sig: &[u8]) -> Result<(), crate::Error> {
+fn unpack_vec_hints(
+    p: &DilithiumParams,
+    h: &mut [poly::Poly],
+    sig: &[u8],
+) -> Result<(), crate::Error> {
     debug_assert_eq!(h.len(), p.k);
     debug_assert_eq!(sig.len(), p.omega + p.k);
 
@@ -524,7 +528,7 @@ fn unpack_vec_hints(p: &DilithiumParams, h: &mut [poly::Poly], sig: &[u8]) -> Re
         let hints_start = offset;
         let hints_end = sig[p.omega + poly_idx] as usize;
         if hints_end < hints_start || hints_end > p.omega {
-            return Err(crate::Error::InvalidSignature);
+            return Err(crate::Error::default());
         }
 
         for sig_idx in hints_start..hints_end {
@@ -532,8 +536,8 @@ fn unpack_vec_hints(p: &DilithiumParams, h: &mut [poly::Poly], sig: &[u8]) -> Re
             if sig_idx > hints_start {
                 // Assert that the coefficients are ordered for strong unforgeability
                 let prev_coeff_idx = sig[sig_idx - 1] as usize;
-                if !(prev_coeff_idx < coeff_idx) {
-                    return Err(crate::Error::InvalidSignature);
+                if prev_coeff_idx >= coeff_idx {
+                    return Err(crate::Error::default());
                 }
             }
             poly.coeffs[coeff_idx] = 1;
@@ -543,7 +547,7 @@ fn unpack_vec_hints(p: &DilithiumParams, h: &mut [poly::Poly], sig: &[u8]) -> Re
 
     // Assert that the rest of the signature is zeroed
     if !sig[offset..p.omega].iter().all(|b| *b == 0) {
-        return Err(crate::Error::InvalidSignature);
+        return Err(crate::Error::default());
     }
 
     Ok(())
