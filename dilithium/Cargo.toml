@@ -1,0 +1,17 @@
+[package]
+name = "li2"
+authors = ["Amber Sprenkels <amber@electricdusk.com>"]
+description = "Rust implementation of the Dilithium signature scheme"
+version = "0.0.1"
+license = "MIT"
+repository = "https://github.com/dsprenkels/li2"
+edition = "2021"
+
+[dependencies]
+digest = "0.10.6"
+signature = "1.6.4"
+
+[dev-dependencies]
+crystals-dilithium-sys = {path = "../crystals-dilithium-sys"}
+once_cell = "1.16.0"
+static_assertions = "1.1.0"
