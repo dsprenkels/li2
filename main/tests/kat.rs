@@ -2,15 +2,12 @@ use once_cell::sync::Lazy;
 use std::ptr::null_mut;
 use std::sync::Mutex;
 
-use li2::{Signer, Verifier};
-
 // Unfortunately the deterministic KAT rng state is global.
 static KAT_RNG_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::default());
 
 #[test]
 fn kat_dilithium2() {
     use crystals_dilithium_sys::dilithium2::*;
-    use li2::dilithium2;
 
     let rng_guard = KAT_RNG_MUTEX.lock();
 
@@ -73,13 +70,14 @@ fn kat_dilithium2() {
 
             // Generate the actual values
             randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
-            let mut keygen_seed = [0; dilithium2::SEED_LENGTH];
-            randombytes(keygen_seed.as_mut_ptr(), dilithium2::SEED_LENGTH as u64);
-            let keypair = dilithium2::Keypair::generate_from_seed(&keygen_seed).unwrap();
-            let sk_actual = keypair.secret;
-            let pk_actual = keypair.public;
-            let sig_actual = sk_actual.sign(msg);
-            let verify_actual = pk_actual.verify(msg, &sig_actual);
+            let mut keygen_seed = [0; SEEDBYTES as usize];
+            randombytes(keygen_seed.as_mut_ptr(), SEEDBYTES as u64);
+            let mut sk_actual = [0; CRYPTO_SECRETKEYBYTES as usize];
+            let mut pk_actual = [0; CRYPTO_PUBLICKEYBYTES as usize];
+            let mut sig_actual = [0; CRYPTO_BYTES as usize];
+            li2::dilithium2_keygen_from_seed(&mut sk_actual, &mut pk_actual, &keygen_seed).unwrap();
+            li2::dilithium2_signature(&sk_actual, msg, &mut sig_actual).unwrap();
+            let verify_actual = li2::dilithium2_verify(&pk_actual, msg, &sig_actual);
 
             assert_eq!(
                 pk_actual.as_ref(),
@@ -106,7 +104,6 @@ fn kat_dilithium2() {
 #[test]
 fn kat_dilithium3() {
     use crystals_dilithium_sys::dilithium3::*;
-    use li2::dilithium3;
 
     let rng_guard = KAT_RNG_MUTEX.lock();
 
@@ -169,13 +166,14 @@ fn kat_dilithium3() {
 
             // Generate the actual values
             randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
-            let mut keygen_seed = [0; dilithium3::SEED_LENGTH];
-            randombytes(keygen_seed.as_mut_ptr(), dilithium3::SEED_LENGTH as u64);
-            let keypair = dilithium3::Keypair::generate_from_seed(&keygen_seed).unwrap();
-            let sk_actual = keypair.secret;
-            let pk_actual = keypair.public;
-            let sig_actual = sk_actual.sign(msg);
-            let verify_actual = pk_actual.verify(msg, &sig_actual);
+            let mut keygen_seed = [0; SEEDBYTES as usize];
+            randombytes(keygen_seed.as_mut_ptr(), SEEDBYTES as u64);
+            let mut sk_actual = [0; CRYPTO_SECRETKEYBYTES as usize];
+            let mut pk_actual = [0; CRYPTO_PUBLICKEYBYTES as usize];
+            let mut sig_actual = [0; CRYPTO_BYTES as usize];
+            li2::dilithium3_keygen_from_seed(&mut sk_actual, &mut pk_actual, &keygen_seed).unwrap();
+            li2::dilithium3_signature(&sk_actual, msg, &mut sig_actual).unwrap();
+            let verify_actual = li2::dilithium3_verify(&pk_actual, msg, &sig_actual);
 
             assert_eq!(
                 pk_actual.as_ref(),
@@ -202,7 +200,6 @@ fn kat_dilithium3() {
 #[test]
 fn kat_dilithium5() {
     use crystals_dilithium_sys::dilithium5::*;
-    use li2::dilithium5;
 
     let rng_guard = KAT_RNG_MUTEX.lock();
 
@@ -265,13 +262,14 @@ fn kat_dilithium5() {
 
             // Generate the actual values
             randombytes_init(seed.as_mut_ptr(), null_mut(), 256);
-            let mut keygen_seed = [0; dilithium5::SEED_LENGTH];
-            randombytes(keygen_seed.as_mut_ptr(), dilithium5::SEED_LENGTH as u64);
-            let keypair = dilithium5::Keypair::generate_from_seed(&keygen_seed).unwrap();
-            let sk_actual = keypair.secret;
-            let pk_actual = keypair.public;
-            let sig_actual = sk_actual.sign(msg);
-            let verify_actual = pk_actual.verify(msg, &sig_actual);
+            let mut keygen_seed = [0; SEEDBYTES as usize];
+            randombytes(keygen_seed.as_mut_ptr(), SEEDBYTES as u64);
+            let mut sk_actual = [0; CRYPTO_SECRETKEYBYTES as usize];
+            let mut pk_actual = [0; CRYPTO_PUBLICKEYBYTES as usize];
+            let mut sig_actual = [0; CRYPTO_BYTES as usize];
+            li2::dilithium5_keygen_from_seed(&mut sk_actual, &mut pk_actual, &keygen_seed).unwrap();
+            li2::dilithium5_signature(&sk_actual, msg, &mut sig_actual).unwrap();
+            let verify_actual = li2::dilithium5_verify(&pk_actual, msg, &sig_actual);
 
             assert_eq!(
                 pk_actual.as_ref(),

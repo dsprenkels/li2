@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "dilithium",
+    "main",
+    "staticlib",
     "crystals-dilithium-sys",
 ]

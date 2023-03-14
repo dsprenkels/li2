@@ -2,7 +2,7 @@ pub(crate) const Q: i32 = 8380417;
 pub(crate) const N: usize = 256;
 pub(crate) const D: u32 = 13;
 
-pub(crate) const SEEDBYTES: usize = 32;
+pub const SEEDBYTES: usize = 32;
 pub(crate) const CRHBYTES: usize = 64;
 
 pub trait DilithiumTypes {
@@ -23,7 +23,8 @@ impl DilithiumTypes for GenericTypes {
 // TODO: impl DilithiumTypes for AVX2Types
 // TODO: impl DilithiumTypes for LowMemoryTypes
 
-pub(crate) struct DilithiumParams {
+#[derive(Debug)]
+pub struct DilithiumParams {
     pub(crate) k: usize,
     pub(crate) l: usize,
     pub(crate) eta: i32,
@@ -39,13 +40,12 @@ pub(crate) struct DilithiumParams {
     pub(crate) z_poly_packed_len: usize,
     pub(crate) w1_poly_packed_len: usize,
     pub(crate) eta_poly_packed_len: usize,
-    pub(crate) public_key_len: usize,
-    pub(crate) secret_key_len: usize,
-    pub(crate) signature_len: usize,
+    pub public_key_len: usize,
+    pub secret_key_len: usize,
+    pub signature_len: usize,
 }
 
-#[allow(non_snake_case)]
-pub(crate) const DILITHIUM2: DilithiumParams = DilithiumParams {
+pub const DILITHIUM2: DilithiumParams = DilithiumParams {
     k: 4,
     l: 4,
     eta: 2,
@@ -66,8 +66,7 @@ pub(crate) const DILITHIUM2: DilithiumParams = DilithiumParams {
     signature_len: 2420,
 };
 
-#[allow(non_snake_case)]
-pub(crate) const DILITHIUM3: DilithiumParams = DilithiumParams {
+pub const DILITHIUM3: DilithiumParams = DilithiumParams {
     k: 6,
     l: 5,
     eta: 4,
@@ -88,8 +87,7 @@ pub(crate) const DILITHIUM3: DilithiumParams = DilithiumParams {
     signature_len: 3293,
 };
 
-#[allow(non_snake_case)]
-pub(crate) const DILITHIUM5: DilithiumParams = DilithiumParams {
+pub const DILITHIUM5: DilithiumParams = DilithiumParams {
     k: 8,
     l: 7,
     eta: 2,

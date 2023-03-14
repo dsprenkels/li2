@@ -1,7 +1,6 @@
 use crate::params::*;
-use crate::{api, keccak, packing, poly};
+use crate::{keccak, packing, poly};
 use digest::{ExtendableOutput, Update, XofReader};
-use signature::Signature;
 
 // TODO: LEFT HERE
 //
@@ -38,8 +37,9 @@ struct KeygenMemoryPool<'a> {
     keccak: &'a mut crate::keccak::KeccakState,
 }
 
-pub(crate) fn dilithium2_keygen_from_seed(
-    keypair: &mut api::dilithium2::Keypair,
+pub fn dilithium2_keygen_from_seed(
+    sk: &mut [u8],
+    pk: &mut [u8],
     seed: &[u8],
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
@@ -53,8 +53,8 @@ pub(crate) fn dilithium2_keygen_from_seed(
     let mut t1 = [poly::Poly::zero(); P.k];
 
     let mem = KeygenMemoryPool {
-        sk: &mut keypair.secret.bytes,
-        pk: &mut keypair.public.bytes,
+        sk,
+        pk,
         seedbuf: &mut seedbuf,
         tr: &mut tr,
         mat: &mut mat,
@@ -68,8 +68,9 @@ pub(crate) fn dilithium2_keygen_from_seed(
     dilithium_keygen_from_seed(&P, mem, seed)
 }
 
-pub(crate) fn dilithium3_keygen_from_seed(
-    keypair: &mut api::dilithium3::Keypair,
+pub fn dilithium3_keygen_from_seed(
+    sk: &mut [u8],
+    pk: &mut [u8],
     seed: &[u8],
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
@@ -83,8 +84,8 @@ pub(crate) fn dilithium3_keygen_from_seed(
     let mut t1 = [poly::Poly::zero(); P.k];
 
     let mem = KeygenMemoryPool {
-        sk: &mut keypair.secret.bytes,
-        pk: &mut keypair.public.bytes,
+        sk,
+        pk,
         seedbuf: &mut seedbuf,
         tr: &mut tr,
         mat: &mut mat,
@@ -98,8 +99,9 @@ pub(crate) fn dilithium3_keygen_from_seed(
     dilithium_keygen_from_seed(&P, mem, seed)
 }
 
-pub(crate) fn dilithium5_keygen_from_seed(
-    keypair: &mut api::dilithium5::Keypair,
+pub fn dilithium5_keygen_from_seed(
+    sk: &mut [u8],
+    pk: &mut [u8],
     seed: &[u8],
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
@@ -113,8 +115,8 @@ pub(crate) fn dilithium5_keygen_from_seed(
     let mut t1 = [poly::Poly::zero(); P.k];
 
     let mem = KeygenMemoryPool {
-        sk: &mut keypair.secret.bytes,
-        pk: &mut keypair.public.bytes,
+        sk,
+        pk,
         seedbuf: &mut seedbuf,
         tr: &mut tr,
         mat: &mut mat,
@@ -198,12 +200,12 @@ struct SignMemoryPool<'a> {
     keccak: &'a mut crate::keccak::KeccakState,
 }
 
-pub(crate) fn dilithium2_signature(
-    sk: &api::dilithium2::SecretKey,
+pub fn dilithium2_signature(
+    sk: &[u8],
     msg: &[u8],
-) -> Result<api::dilithium2::Signature, crate::Error> {
+    sig: &mut [u8],
+) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
-    let mut sigbytes = [0; P.signature_len];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
     let mut s1 = [poly::Poly::zero(); P.l];
@@ -217,7 +219,7 @@ pub(crate) fn dilithium2_signature(
     let mut cp = poly::Poly::zero();
 
     let mem = SignMemoryPool {
-        sigbytes: &mut sigbytes[..],
+        sigbytes: &mut sig[..],
         seedbuf: &mut seedbuf[..],
         mat: &mut mat[..],
         s1: &mut s1[..],
@@ -231,16 +233,16 @@ pub(crate) fn dilithium2_signature(
         cp: &mut cp,
         keccak: &mut crate::keccak::KeccakState::default(),
     };
-    dilithium_signature(&P, mem, &sk.bytes, msg)?;
-    Ok(api::dilithium2::Signature { bytes: sigbytes })
+    dilithium_signature(&P, mem, &sk, msg)?;
+    Ok(())
 }
 
-pub(crate) fn dilithium3_signature(
-    sk: &api::dilithium3::SecretKey,
+pub fn dilithium3_signature(
+    sk: &[u8],
     m: &[u8],
-) -> Result<api::dilithium3::Signature, crate::Error> {
+    sig: &mut [u8],
+) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
-    let mut sigbytes = [0; P.signature_len];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
     let mut s1 = [poly::Poly::zero(); P.l];
@@ -254,7 +256,7 @@ pub(crate) fn dilithium3_signature(
     let mut cp = poly::Poly::zero();
 
     let mem = SignMemoryPool {
-        sigbytes: &mut sigbytes[..],
+        sigbytes: &mut sig[..],
         seedbuf: &mut seedbuf[..],
         mat: &mut mat[..],
         s1: &mut s1[..],
@@ -269,16 +271,16 @@ pub(crate) fn dilithium3_signature(
         keccak: &mut crate::keccak::KeccakState::default(),
     };
 
-    dilithium_signature(&P, mem, &sk.bytes, m)?;
-    Ok(api::dilithium3::Signature { bytes: sigbytes })
+    dilithium_signature(&P, mem, &sk, m)?;
+    Ok(())
 }
 
-pub(crate) fn dilithium5_signature(
-    sk: &api::dilithium5::SecretKey,
+pub fn dilithium5_signature(
+    sk: &[u8],
     m: &[u8],
-) -> Result<api::dilithium5::Signature, crate::Error> {
+    sig: &mut [u8],
+) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
-    let mut sigbytes = [0; P.signature_len];
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
     let mut s1 = [poly::Poly::zero(); P.l];
@@ -292,7 +294,7 @@ pub(crate) fn dilithium5_signature(
     let mut cp = poly::Poly::zero();
 
     let mem = SignMemoryPool {
-        sigbytes: &mut sigbytes[..],
+        sigbytes: &mut sig[..],
         seedbuf: &mut seedbuf[..],
         mat: &mut mat[..],
         s1: &mut s1[..],
@@ -307,8 +309,8 @@ pub(crate) fn dilithium5_signature(
         keccak: &mut crate::keccak::KeccakState::default(),
     };
 
-    dilithium_signature(&P, mem, &sk.bytes, m)?;
-    Ok(api::dilithium5::Signature { bytes: sigbytes })
+    dilithium_signature(&P, mem, &sk, m)?;
+    Ok(())
 }
 
 fn dilithium_signature(
@@ -435,10 +437,10 @@ struct VerifyMemoryPool<'a> {
     keccak: &'a mut crate::keccak::KeccakState,
 }
 
-pub(crate) fn dilithium2_verify(
-    pk: &api::dilithium2::PublicKey,
+pub fn dilithium2_verify(
+    pk: &[u8],
     m: &[u8],
-    sig: &api::dilithium2::Signature,
+    sig: &[u8],
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
     let mut buf = [0; P.k * P.w1_poly_packed_len];
@@ -468,13 +470,13 @@ pub(crate) fn dilithium2_verify(
         keccak: &mut crate::keccak::KeccakState::default(),
     };
 
-    dilithium_verify(&P, mem, &pk.bytes, m, &sig.bytes)
+    dilithium_verify(&P, mem, &pk, m, &sig)
 }
 
-pub(crate) fn dilithium3_verify(
-    pk: &api::dilithium3::PublicKey,
+pub fn dilithium3_verify(
+    pk: &[u8],
     m: &[u8],
-    sig: &api::dilithium3::Signature,
+    sig: &[u8],
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
     let mut buf = [0; P.k * P.w1_poly_packed_len];
@@ -504,13 +506,13 @@ pub(crate) fn dilithium3_verify(
         keccak: &mut crate::keccak::KeccakState::default(),
     };
 
-    dilithium_verify(&P, mem, &pk.bytes, m, &sig.bytes)
+    dilithium_verify(&P, mem, &pk, m, &sig)
 }
 
-pub(crate) fn dilithium5_verify(
-    pk: &api::dilithium5::PublicKey,
+pub fn dilithium5_verify(
+    pk: &[u8],
     m: &[u8],
-    sig: &api::dilithium5::Signature,
+    sig: &[u8],
 ) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
     let mut buf = [0; P.k * P.w1_poly_packed_len];
@@ -540,7 +542,7 @@ pub(crate) fn dilithium5_verify(
         keccak: &mut crate::keccak::KeccakState::default(),
     };
 
-    dilithium_verify(&P, mem, &pk.bytes, m, sig.as_bytes())
+    dilithium_verify(&P, mem, &pk, m, sig)
 }
 
 fn dilithium_verify(
@@ -604,16 +606,12 @@ mod tests {
     extern crate std;
 
     use super::*;
-    use crate::dilithium3::Keypair;
     use signature::{Signer, Verifier};
 
     #[test]
     #[ignore = "todo"]
     fn test_keygen_from_seed() {
-        let seed = [0; SEEDBYTES];
-        let _keypair = Keypair::generate_from_seed(&seed).unwrap();
         todo!()
-
         // TODO: Check whether t0 + t1 << D == t
         // TODO: Check whether A*s1 + s2 == t
     }
@@ -621,9 +619,11 @@ mod tests {
     #[test]
     fn test_empty_message() {
         let seed = [0; SEEDBYTES];
-        let keypair = Keypair::generate_from_seed(&seed).unwrap();
-        let sk = keypair.secret;
-        let pk = keypair.public;
+        let mut sk = [0; DILITHIUM3.secret_key_len];
+        let mut pk = [0; DILITHIUM3.public_key_len];
+        let mut sig = [0; DILITHIUM3.signature_len];
+
+        dilithium3_keygen_from_seed(&mut sk, &mut pk, &seed);
 
         let sigbytes_expected = unsafe {
             let mut sig = [0; DILITHIUM3.signature_len];
@@ -633,21 +633,21 @@ mod tests {
                 &mut siglen,
                 [].as_ptr(),
                 0,
-                sk.bytes.as_ptr(),
+                sk.as_ptr(),
             );
             assert_eq!(siglen, DILITHIUM3.signature_len, "siglen mismatch");
             sig
         };
-        let sig_actual = sk.sign(&[]);
-        let sigbytes_actual = sig_actual.bytes;
+
+        dilithium3_signature(&sk, &[], &mut sig);
 
         assert_eq!(
-            &sigbytes_actual[..],
+            &sig[..],
             &sigbytes_expected[..],
             "signature mismatch"
         );
 
-        let verified = pk.verify(&[], &sig_actual);
+        let verified = dilithium3_verify(&pk, &[], &sig);
         assert!(verified.is_ok())
     }
 }

@@ -1,0 +1,15 @@
+[package]
+name = "li2-staticlib"
+authors = ["Amber Sprenkels <amber@electricdusk.com>"]
+description = "Rust implementation of the Dilithium signature scheme"
+version = "0.0.1"
+license = "MIT"
+repository = "https://github.com/dsprenkels/li2"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+panic-halt = "0.2.0"
+li2 = {path = "../main", default-features = false, features = ["basic-api"]}

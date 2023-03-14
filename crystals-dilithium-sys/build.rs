@@ -15,7 +15,6 @@ fn main() {
         "crystals-dilithium/ref/ntt.c",
         "crystals-dilithium/ref/reduce.c",
         "crystals-dilithium/ref/rounding.c",
-        "crystals-dilithium/ref/fips202.c",
         "crystals-dilithium/ref/symmetric-shake.c",
     ];
     for mode in modes {
@@ -31,6 +30,15 @@ fn main() {
         println!("cargo:rerun-if-changed={}", file);
     }
     drop(files);
+
+    // Compile fips202 package
+    cc::Build::new()
+        .shared_flag(true)
+        .static_flag(true)
+        .include("crystals-dilithium/ref")
+        .file("crystals-dilithium/ref/fips202.c")
+        .compile("fips202");
+    println!("crystals-dilithium/ref/fips202.c");
 
     // Compile deterministic rng
     cc::Build::new()
