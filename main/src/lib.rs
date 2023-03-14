@@ -17,7 +17,6 @@
 pub type Error = signature::Error;
 
 // TODO: Reorganize all of the modules
-mod api;
 mod challenge;
 mod dilithium;
 mod expanda;
@@ -31,7 +30,5 @@ mod poly;
 mod reduce;
 mod rounding;
 
-pub use digest::Digest;
-pub use signature::{Signer, Verifier};
-
-pub use api::{dilithium2, dilithium3, dilithium5};
+pub use dilithium::*;
+pub use params::*;
