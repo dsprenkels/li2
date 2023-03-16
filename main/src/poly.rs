@@ -12,6 +12,65 @@ impl Poly {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub(crate) struct CompressedPoly {
+    pub(crate) coeffs: [u32; 3 * N / 4],
+}
+
+impl CompressedPoly {
+    pub(crate) fn zero() -> Self {
+        Self {
+            coeffs: [0; 3 * N / 4],
+        }
+    }
+
+    #[inline]
+    pub(crate) fn get(&self, idx: usize) -> i32 {
+        let limb = 3 * idx / 4;
+        let offset = 3 * idx % 4;
+        let bits = match offset {
+            0 => self.coeffs[limb] & 0xFFFFFF,
+            1 => self.coeffs[limb] >> 8,
+            2 => (self.coeffs[limb] >> 16) | ((self.coeffs[limb + 1] & 0xFF) << 16),
+            3 => (self.coeffs[limb] >> 24) | ((self.coeffs[limb + 1] & 0xFFFF) << 8),
+            _ => unreachable!(),
+        };
+        // Sign-extend from 24 to 32 bits
+        (bits << 8) as i32 >> 8
+    }
+
+    #[inline]
+    pub(crate) fn set(&mut self, idx: usize, coeff: i32) {
+        let limb = 3 * idx / 4;
+        let offset = 3 * idx % 4;
+        let value = coeff as u32;
+        match offset {
+            0 => {
+                self.coeffs[limb] &= !0x00FFFFFF;
+                self.coeffs[limb] |= value & 0xFFFFFF;
+            }
+            1 => {
+                self.coeffs[limb] &= !0xFFFFFF00;
+                self.coeffs[limb] |= (value & 0xFFFFFF) << 8;
+            }
+            2 => {
+                self.coeffs[limb] &= !0xFFFF0000;
+                self.coeffs[limb] |= (value & 0x00FFFF) << 16;
+                self.coeffs[limb + 1] &= !0x000000FF;
+                self.coeffs[limb + 1] |= (value & 0xFF0000) >> 16;
+            }
+            3 => {
+                self.coeffs[limb] &= !0xFF000000;
+                self.coeffs[limb] |= (value & 0x0000FF) << 24;
+                self.coeffs[limb + 1] &= !0x0000FFFF;
+                self.coeffs[limb + 1] |= (value & 0xFFFF00) >> 8;
+            }
+            _ => unreachable!(),
+        };
+    }
+}
+
 pub(crate) fn poly_pointwise_montgomery(c: &mut Poly, a: &Poly, b: &Poly) {
     let dest = c.coeffs.iter_mut();
     let src = a.coeffs.iter().zip(b.coeffs.iter());
@@ -172,4 +231,29 @@ pub(crate) fn polyvec_make_hint(p: &DilithiumParams, vec0: &mut [Poly], vec1: &[
         popcount += poly_make_hint(p, poly0, poly1);
     }
     popcount
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_compressed_poly() {
+        for _ in 0..10000 {
+            // Generate random poly
+            let mut poly = super::Poly::zero();
+            for coeff in poly.coeffs.iter_mut() {
+                *coeff = rand::random::<i32>() & 0x7FFFFF;
+                if rand::random::<bool>() {
+                    *coeff = -*coeff;
+                }
+            }
+            let mut compressed = super::CompressedPoly::zero();
+            for (idx, coeff) in poly.coeffs.iter().enumerate() {
+                compressed.set(idx, *coeff);
+            }
+            for (idx, expected) in poly.coeffs.iter().enumerate() {
+                let actual = compressed.get(idx);
+                assert_eq!(actual, *expected);
+            }
+        }
+    }
 }

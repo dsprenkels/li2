@@ -43,3 +43,36 @@ fn poly_uniform(
         }
     }
 }
+
+pub struct PolyUniform<'a> {
+    xofread: keccak::SHAKE128Reader<'a>,
+}
+
+impl Iterator for PolyUniform<'_> {
+    type Item = i32;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let mut sample = [0; 4];
+            self.xofread.read(&mut sample[0..3]);
+            let mut t = i32::from_le_bytes(sample);
+            t &= 0x7FFFFF;
+            if t < Q {
+                return Some(t);
+            }
+        }
+    }
+}
+
+pub(crate) fn poly_uniform_iter<'a>(
+    seed: &[u8],
+    nonce: u16,
+    keccak: &'a mut keccak::KeccakState,
+) -> PolyUniform<'a> {
+    let mut xof = keccak::SHAKE128::new(keccak);
+    xof.update(seed);
+    xof.update(&nonce.to_le_bytes());
+    let xofread = xof.finalize_xof();
+    PolyUniform { xofread }
+}

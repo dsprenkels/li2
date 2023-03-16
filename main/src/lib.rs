@@ -18,7 +18,8 @@ pub type Error = signature::Error;
 
 // TODO: Reorganize all of the modules
 mod challenge;
-mod dilithium;
+mod fast;
+mod small;
 mod expanda;
 mod expandmask;
 mod expands;
@@ -30,5 +31,9 @@ mod poly;
 mod reduce;
 mod rounding;
 
-pub use dilithium::*;
+#[cfg(feature = "fast")]
+pub use fast::*;
+#[cfg(feature = "small")]
+pub use small::*;
+
 pub use params::*;

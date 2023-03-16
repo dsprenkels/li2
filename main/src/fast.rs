@@ -200,11 +200,7 @@ struct SignMemoryPool<'a> {
     keccak: &'a mut crate::keccak::KeccakState,
 }
 
-pub fn dilithium2_signature(
-    sk: &[u8],
-    msg: &[u8],
-    sig: &mut [u8],
-) -> Result<(), crate::Error> {
+pub fn dilithium2_signature(sk: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
@@ -237,11 +233,7 @@ pub fn dilithium2_signature(
     Ok(())
 }
 
-pub fn dilithium3_signature(
-    sk: &[u8],
-    m: &[u8],
-    sig: &mut [u8],
-) -> Result<(), crate::Error> {
+pub fn dilithium3_signature(sk: &[u8], m: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
@@ -275,11 +267,7 @@ pub fn dilithium3_signature(
     Ok(())
 }
 
-pub fn dilithium5_signature(
-    sk: &[u8],
-    m: &[u8],
-    sig: &mut [u8],
-) -> Result<(), crate::Error> {
+pub fn dilithium5_signature(sk: &[u8], m: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
     let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); P.k * P.l];
@@ -437,11 +425,7 @@ struct VerifyMemoryPool<'a> {
     keccak: &'a mut crate::keccak::KeccakState,
 }
 
-pub fn dilithium2_verify(
-    pk: &[u8],
-    m: &[u8],
-    sig: &[u8],
-) -> Result<(), crate::Error> {
+pub fn dilithium2_verify(pk: &[u8], m: &[u8], sig: &[u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
     let mut buf = [0; P.k * P.w1_poly_packed_len];
     let mut rho = [0; SEEDBYTES];
@@ -473,11 +457,7 @@ pub fn dilithium2_verify(
     dilithium_verify(&P, mem, &pk, m, &sig)
 }
 
-pub fn dilithium3_verify(
-    pk: &[u8],
-    m: &[u8],
-    sig: &[u8],
-) -> Result<(), crate::Error> {
+pub fn dilithium3_verify(pk: &[u8], m: &[u8], sig: &[u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
     let mut buf = [0; P.k * P.w1_poly_packed_len];
     let mut rho = [0; SEEDBYTES];
@@ -509,11 +489,7 @@ pub fn dilithium3_verify(
     dilithium_verify(&P, mem, &pk, m, &sig)
 }
 
-pub fn dilithium5_verify(
-    pk: &[u8],
-    m: &[u8],
-    sig: &[u8],
-) -> Result<(), crate::Error> {
+pub fn dilithium5_verify(pk: &[u8], m: &[u8], sig: &[u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
     let mut buf = [0; P.k * P.w1_poly_packed_len];
     let mut rho = [0; SEEDBYTES];
@@ -601,7 +577,7 @@ fn dilithium_verify(
 
 #[cfg(test)]
 mod tests {
-    #![deny(dead_code)]
+    #![deny(_old_code)]
 
     extern crate std;
 
@@ -641,11 +617,7 @@ mod tests {
 
         dilithium3_signature(&sk, &[], &mut sig);
 
-        assert_eq!(
-            &sig[..],
-            &sigbytes_expected[..],
-            "signature mismatch"
-        );
+        assert_eq!(&sig[..], &sigbytes_expected[..], "signature mismatch");
 
         let verified = dilithium3_verify(&pk, &[], &sig);
         assert!(verified.is_ok())

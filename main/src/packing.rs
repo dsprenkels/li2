@@ -44,6 +44,25 @@ pub(crate) fn pack_sk(
     debug_assert_eq!(offset, p.secret_key_len);
 }
 
+
+
+pub(crate) fn sk_split<'a>(
+    p: &DilithiumParams,
+    sk: &'a[u8],
+) -> (&'a[u8], &'a[u8], &'a[u8], &'a[u8], &'a[u8], &'a[u8]) {
+    debug_assert_eq!(sk.len(), p.secret_key_len);
+    
+    let (rho, sk) = sk.split_at(SEEDBYTES);
+    let (key, sk) = sk.split_at(SEEDBYTES);
+    let (tr, sk) = sk.split_at(SEEDBYTES);
+    let (s1, sk) = sk.split_at(p.l * p.eta_poly_packed_len);
+    let (s2, sk) = sk.split_at(p.k * p.eta_poly_packed_len);
+    let (t0, sk) = sk.split_at(p.k * p.t0_poly_packed_len);
+    debug_assert_eq!(sk.len(), 0);
+    
+    (rho, key, tr, s1, s2, t0)
+}
+
 pub(crate) fn unpack_sk(
     p: &DilithiumParams,
     rho: &mut [u8],
@@ -71,11 +90,11 @@ pub(crate) fn unpack_sk(
     offset += SEEDBYTES;
 
     for poly in s1.iter_mut() {
-        unpack_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
+        decode_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
         offset += p.eta_poly_packed_len;
     }
     for poly in s2.iter_mut() {
-        unpack_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
+        decode_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
         offset += p.eta_poly_packed_len;
     }
     for poly in t0.iter_mut() {
@@ -211,7 +230,7 @@ pub(crate) fn pack_poly_eta(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Pol
     }
 }
 
-pub(crate) fn unpack_poly_eta(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
+pub(crate) fn decode_poly_eta(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
     debug_assert_eq!(packed.len(), p.eta_poly_packed_len);
 
     if p.eta == 2 {
