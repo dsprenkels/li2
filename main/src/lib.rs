@@ -18,11 +18,11 @@ pub type Error = signature::Error;
 
 // TODO: Reorganize all of the modules
 mod challenge;
-mod fast;
-mod small;
 mod expanda;
 mod expandmask;
 mod expands;
+#[cfg(feature = "fast")]
+mod fast;
 mod keccak;
 mod ntt;
 mod packing;
@@ -30,6 +30,8 @@ mod params;
 mod poly;
 mod reduce;
 mod rounding;
+#[cfg(feature = "small")]
+mod small;
 
 #[cfg(feature = "fast")]
 pub use fast::*;

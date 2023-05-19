@@ -20,17 +20,17 @@ struct SignMemoryPool<'a> {
 
 pub fn dilithium2_signature(sk: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
-    dilithium_signature_mem::<{ P.k }, { P.l }, { P.k * P.l }>(&P, &sk, msg, sig)
+    dilithium_signature_mem::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, msg, sig)
 }
 
 pub fn dilithium3_signature(sk: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
-    dilithium_signature_mem::<{ P.k }, { P.l }, { P.k * P.l }>(&P, &sk, msg, sig)
+    dilithium_signature_mem::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, msg, sig)
 }
 
 pub fn dilithium5_signature(sk: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
-    dilithium_signature_mem::<{ P.k }, { P.l }, { P.k * P.l }>(&P, &sk, msg, sig)
+    dilithium_signature_mem::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, msg, sig)
 }
 
 fn dilithium_signature_mem<const K: usize, const L: usize, const KL: usize>(
@@ -67,7 +67,7 @@ fn dilithium_signature_mem<const K: usize, const L: usize, const KL: usize>(
         keccak: &mut crate::keccak::KeccakState::default(),
     };
 
-    dilithium_signature_inner(p, mem, &sk, msg)
+    dilithium_signature_inner(p, mem, sk, msg)
 }
 
 fn dilithium_signature_inner(
@@ -135,7 +135,7 @@ fn dilithium_signature_inner(
             expandmask::poly_uniform_gamma1(
                 p,
                 &mut y_elem,
-                &rhoprime,
+                rhoprime,
                 expandmask_nonce,
                 mem.keccak,
             );
