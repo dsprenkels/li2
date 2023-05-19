@@ -29,7 +29,6 @@ fn main() {
     for file in files {
         println!("cargo:rerun-if-changed={}", file);
     }
-    drop(files);
 
     // Compile fips202 package
     cc::Build::new()

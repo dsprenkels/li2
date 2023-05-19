@@ -121,8 +121,10 @@ pub(crate) fn pack_pk(p: &DilithiumParams, pk: &mut [u8], rho: &[u8], t1: &[poly
 }
 
 pub(crate) fn unpack_pk(p: &DilithiumParams, rho: &mut [u8], t1: &mut [poly::Poly], pk: &[u8]) {
-    debug_assert_eq!(pk.len(), p.public_key_len);
+    debug_assert_eq!(rho.len(), SEEDBYTES);
     debug_assert_eq!(t1.len(), p.k);
+    debug_assert_eq!(pk.len(), p.public_key_len);
+
 
     let mut offset = 0;
     rho.copy_from_slice(&pk[offset..offset + SEEDBYTES]);

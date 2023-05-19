@@ -1,14 +1,15 @@
 [package]
-name = "li2"
 authors = ["Amber Sprenkels <amber@electricdusk.com>"]
 description = "Rust implementation of the Dilithium signature scheme"
-version = "0.0.1"
-license = "MIT"
-repository = "https://github.com/dsprenkels/li2"
 edition = "2021"
+license = "MIT"
+name = "li2"
+repository = "https://github.com/dsprenkels/li2"
+version = "0.0.1"
 
 [dependencies]
 digest = {version = "0.10.6", default-features = false}
+rand = {version = "0.8.5", optional = true}
 signature = {version = "1.6.4", default-features = false}
 
 [dev-dependencies]
@@ -18,8 +19,9 @@ rand = "0.8.5"
 static_assertions = "1.1.0"
 
 [features]
-default = ["std", "fast"]
-std = ["digest/std", "signature/std"]
 basic-api = []
+default = ["std", "fast"]
 fast = []
+ring = ["std", "fast", "rand"]
 small = []
+std = ["digest/std", "signature/std"]

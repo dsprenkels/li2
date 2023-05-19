@@ -14,6 +14,9 @@
 )]
 #![no_std]
 
+#[cfg(feature="std")]
+extern crate std;
+
 pub type Error = signature::Error;
 
 // TODO: Reorganize all of the modules
@@ -29,6 +32,8 @@ mod packing;
 mod params;
 mod poly;
 mod reduce;
+#[cfg(feature = "ring")]
+mod ring;
 mod rounding;
 #[cfg(feature = "small")]
 mod small;
