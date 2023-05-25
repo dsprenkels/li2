@@ -1,3 +1,5 @@
+extern crate std;
+
 use crate::{expanda, keccak, ntt, packing, params::*, poly, reduce};
 
 use digest::{ExtendableOutput, Update, XofReader};
@@ -78,7 +80,7 @@ fn dilithium_signature_inner(
 ) -> Result<(), crate::Error> {
     use crate::expandmask;
 
-    let mut nonce = 0u16;
+    let mut kappa = 0u16;
 
     let seedbuf = mem.seedbuf;
     let (rho_old, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
@@ -116,6 +118,10 @@ fn dilithium_signature_inner(
             panic!("max attempts exceeded");
         }
 
+        // Determine the nonce value for this iteration
+        let nonce = kappa;
+        kappa += 1;
+
         // Set w to 0
         for row in 0..p.k {
             for idx in 0..N {
@@ -141,6 +147,7 @@ fn dilithium_signature_inner(
             );
             ntt::poly_ntt(&mut y_elem);
 
+            // Compute w = A*y
             for row in 0..p.k {
                 let expanda_nonce = ((row as u16) << 8) | col as u16;
                 let mut expanda_iter = expanda::poly_uniform_iter(rho, expanda_nonce, mem.keccak);
@@ -156,16 +163,22 @@ fn dilithium_signature_inner(
             }
         }
 
+        // Compute inverse NTTs of w
+        for poly in mem.w.iter_mut() {
+            let mut tmp = poly::Poly::zero();
+            tmp.copy_from_compressed_poly(poly);
+            ntt::poly_invntt_tomont(&mut tmp);
+            poly.copy_from_poly(&tmp);
+        }
+
         // For now copy the compressed w back to uncompressed w for testing
         for row in 0..p.k {
-            for idx in 0..N {
-                mem.w1[row].coeffs[idx] = mem.w[row].get(idx);
-            }
-            ntt::poly_invntt_tomont(&mut mem.w1[row]);
+            mem.w1[row].copy_from_compressed_poly(&mem.w[row]);
+            poly::poly_pointwise(&mut mem.w1[row], reduce::caddq);
         }
 
         // Decompose w and call the random oracle
-        poly::polyvec_pointwise(mem.w1, crate::reduce::caddq);
+        // TODO: This should become a streaming operation
         poly::polyveck_decompose(p, mem.w1, mem.w0);
         packing::pack_polyvec_w1(p, &mut mem.sigbytes[0..p.k * p.w1_poly_packed_len], mem.w1);
 
@@ -180,15 +193,32 @@ fn dilithium_signature_inner(
         ntt::poly_ntt(mem.cp);
 
         // Compute z, reject if it reveals secret
-        poly::polyvec_pointwise_montgomery(mem.z, mem.cp, mem.s1);
-        ntt::polyvec_invntt_tomont(mem.z);
-        expandmask::polyvecl_uniform_gamma1(p, mem.y, rhoprime, nonce, mem.keccak);
-        poly::polyvec_add(mem.z, mem.y);
-        poly::polyvec_pointwise(mem.z, crate::reduce::reduce32);
-        nonce += 1;
-        if poly::polyvec_chknorm(mem.z, p.gamma1 - p.beta).is_err() {
-            continue 'rej;
+        for idx in 0..p.l {
+            let mut s1_elem = poly::Poly::zero();
+            let offset = idx * p.eta_poly_packed_len;
+            let s1_elem_bytes = &s1bytes[offset..offset + p.eta_poly_packed_len];
+            packing::decode_poly_eta(p, &mut s1_elem, &s1_elem_bytes);
+            ntt::poly_ntt(&mut s1_elem);
+            poly::poly_pointwise_montgomery(&mut mem.z[idx], mem.cp, &s1_elem);
+            ntt::poly_invntt_tomont(&mut mem.z[idx]);
+            let expandmask_nonce = p.l as u16 * nonce + idx as u16;
+            expandmask::poly_uniform_gamma1(
+                p,
+                &mut mem.y[idx],
+                rhoprime,
+                expandmask_nonce,
+                mem.keccak,
+            );
+            poly::poly_add(&mut mem.z[idx], &mem.y[idx]);
+            poly::poly_pointwise(&mut mem.z[idx], reduce::reduce32);
+
+            if poly::poly_chknorm(&mem.z[idx], p.gamma1 - p.beta).is_err() {
+                continue 'rej;
+            }
         }
+
+        // TODO: LEFT HERE
+        // Early write z to signature
 
         // Check that subtracting cs2 does not change high bits of w and
         // low bits do not reveal secret information

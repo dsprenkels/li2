@@ -12,7 +12,8 @@
     trivial_numeric_casts,
     unused_qualifications
 )]
-#![no_std]
+
+// #![cfg_attr(not(feature = "std"), no_std)]
 
 pub type Error = signature::Error;
 
@@ -33,7 +34,7 @@ mod rounding;
 #[cfg(feature = "small")]
 mod small;
 
-#[cfg(feature = "fast")]
+#[cfg(not(feature = "small"))]
 pub use fast::*;
 #[cfg(feature = "small")]
 pub use small::*;

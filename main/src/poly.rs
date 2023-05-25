@@ -10,6 +10,12 @@ impl Poly {
     pub(crate) fn zero() -> Self {
         Self { coeffs: [0; N] }
     }
+
+    pub(crate) fn copy_from_compressed_poly(&mut self, compressed_poly: &CompressedPoly) {
+        for idx in 0..N {
+            self.coeffs[idx] = compressed_poly.get(idx);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,6 +74,12 @@ impl CompressedPoly {
             }
             _ => unreachable!(),
         };
+    }
+
+    pub(crate) fn copy_from_poly(&mut self, poly: &Poly) {
+        for idx in 0..N {
+            self.set(idx, poly.coeffs[idx]);
+        }
     }
 }
 
