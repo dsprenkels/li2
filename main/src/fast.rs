@@ -90,12 +90,12 @@ fn dilithium_keygen_from_seed<const K: usize, const L: usize, const KL: usize>(
     // Matrix-vector multiplication
     let mut s1hat = s1;
     crate::ntt::polyvec_ntt(&mut s1hat);
-    poly::polyvec_matrix_pointwise_montgomery(p, &mut t1, &mat, &*&mut s1hat);
+    poly::polyvec_matrix_pointwise_montgomery(p, &mut t1, &mat, &mut s1hat);
     poly::polyvec_pointwise(&mut t1, &mut crate::reduce::reduce32);
     crate::ntt::polyvec_invntt_tomont(&mut t1);
 
     // Add error vector s2
-    poly::polyvec_add(&mut t1, &*&mut s2);
+    poly::polyvec_add(&mut t1, &mut s2);
 
     // Extract t1 and write public key
     poly::polyvec_pointwise(&mut t1, &mut crate::reduce::caddq);
@@ -325,15 +325,15 @@ fn dilithium_verify<
     crate::ntt::poly_ntt(&mut cp);
     poly::polyvec_pointwise(&mut t1, &mut |x| x << D);
     crate::ntt::polyvec_ntt(&mut t1);
-    poly::polyvec_pointwise_montgomery_inplace(&mut t1, &*&mut cp);
-    poly::polyvec_sub(&mut w1, &*&mut t1);
+    poly::polyvec_pointwise_montgomery_inplace(&mut t1, &mut cp);
+    poly::polyvec_sub(&mut w1, &mut t1);
     poly::polyvec_pointwise(&mut w1, &mut crate::reduce::reduce32);
     crate::ntt::polyvec_invntt_tomont(&mut w1);
 
     // Reconstruct w1
     poly::polyvec_pointwise(&mut w1, &mut crate::reduce::caddq);
-    poly::polyvec_use_hint(p, &mut w1, &*&mut h);
-    packing::pack_polyvec_w1(p, &mut buf, &*&mut w1);
+    poly::polyvec_use_hint(p, &mut w1, &mut h);
+    packing::pack_polyvec_w1(p, &mut buf, &mut w1);
 
     // Call random oracle and verify challenge
     let mut xof = keccak::SHAKE256::new(&mut keccak);

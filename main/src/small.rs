@@ -165,7 +165,7 @@ fn dilithium_signature_inner(
         }
 
         // Decompose w and call the random oracle
-        poly::polyvec_pointwise(mem.w1, crate::reduce::caddq);
+        poly::polyvec_pointwise(mem.w1, &mut crate::reduce::caddq);
         poly::polyveck_decompose(p, mem.w1, mem.w0);
         packing::pack_polyvec_w1(p, &mut mem.sigbytes[0..p.k * p.w1_poly_packed_len], mem.w1);
 
@@ -184,7 +184,7 @@ fn dilithium_signature_inner(
         ntt::polyvec_invntt_tomont(mem.z);
         expandmask::polyvecl_uniform_gamma1(p, mem.y, rhoprime, nonce, mem.keccak);
         poly::polyvec_add(mem.z, mem.y);
-        poly::polyvec_pointwise(mem.z, crate::reduce::reduce32);
+        poly::polyvec_pointwise(mem.z, &mut crate::reduce::reduce32);
         nonce += 1;
         if poly::polyvec_chknorm(mem.z, p.gamma1 - p.beta).is_err() {
             continue 'rej;
@@ -195,7 +195,7 @@ fn dilithium_signature_inner(
         poly::polyvec_pointwise_montgomery(mem.h, mem.cp, mem.s2);
         ntt::polyvec_invntt_tomont(mem.h);
         poly::polyvec_sub(mem.w0, mem.h);
-        poly::polyvec_pointwise(mem.w0, crate::reduce::reduce32);
+        poly::polyvec_pointwise(mem.w0, &mut crate::reduce::reduce32);
         if poly::polyvec_chknorm(mem.w0, p.gamma2 - p.beta).is_err() {
             continue 'rej;
         }
@@ -203,7 +203,7 @@ fn dilithium_signature_inner(
         // Compute hints for w1
         poly::polyvec_pointwise_montgomery(mem.h, mem.cp, mem.t0);
         ntt::polyvec_invntt_tomont(mem.h);
-        poly::polyvec_pointwise(mem.h, crate::reduce::reduce32);
+        poly::polyvec_pointwise(mem.h, &mut crate::reduce::reduce32);
         if poly::polyvec_chknorm(mem.h, p.gamma2).is_err() {
             continue 'rej;
         }
