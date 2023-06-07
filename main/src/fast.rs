@@ -1,5 +1,7 @@
-use crate::{params::*, reduce};
+use core::hint;
+
 use crate::{keccak, packing, poly};
+use crate::{params::*, reduce};
 use digest::{ExtendableOutput, Update, XofReader};
 
 // TODO: LEFT HERE
@@ -158,7 +160,9 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
     let mut key = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
     let mut rhoprime = [0; CRHBYTES];
-    packing::unpack_sk(p, &mut rho, &mut tr, &mut key, &mut t0, &mut s1, &mut s2, sk);
+    packing::unpack_sk(
+        p, &mut rho, &mut tr, &mut key, &mut t0, &mut s1, &mut s2, sk,
+    );
 
     // Compute mu := CRH(tr || msg)
     let mut xof = keccak::SHAKE256::new(&mut keccak);
@@ -193,7 +197,7 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
         let mut z = y;
         crate::ntt::polyvec_ntt(&mut z);
         poly::polyvec_matrix_pointwise_montgomery(p, &mut w1, &mat, &z);
-        poly::polyvec_pointwise(&mut w1,&mut reduce::reduce32);
+        poly::polyvec_pointwise(&mut w1, &mut reduce::reduce32);
         crate::ntt::polyvec_invntt_tomont(&mut w1);
 
         // Decompose w and call the random oracle
@@ -332,8 +336,20 @@ fn dilithium_verify<
 
     // Reconstruct w1
     poly::polyvec_pointwise(&mut w1, &mut crate::reduce::caddq);
-    poly::polyvec_use_hint(p, &mut w1, &mut h);
+    poly::polyvec_use_hint(p, &mut w1, &h);
     packing::pack_polyvec_w1(p, &mut buf, &mut w1);
+
+    // Check that the amount of nonzero hints is at most omega
+    let mut hints_popcount = 0usize;
+    poly::polyvec_pointwise(&mut h, &mut |coeff| {
+        hints_popcount = hints_popcount
+            .checked_add(usize::from(coeff != 0))
+            .expect("overflow");
+        coeff
+    });
+    if hints_popcount > p.omega {
+        return Err(crate::Error::default());
+    }
 
     // Call random oracle and verify challenge
     let mut xof = keccak::SHAKE256::new(&mut keccak);

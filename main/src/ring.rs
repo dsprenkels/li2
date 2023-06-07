@@ -1,8 +1,9 @@
 #![allow(clippy::needless_range_loop)]
 
-use crate::params::*;
 use crate::{challenge, expanda, ntt, reduce, DilithiumParams};
 use crate::{keccak, packing, poly};
+use crate::{params::*, rounding};
+use core::usize;
 use digest::{ExtendableOutput, Update, XofReader};
 use rand::{self, Rng};
 use std::vec;
@@ -26,7 +27,6 @@ struct RingSigPart<const L: usize, const K: usize> {
     ctilde: [u8; SEEDBYTES],
     rho: [u8; SEEDBYTES],
     z: [poly::Poly; L],
-    hints: [poly::Poly; K],
 }
 
 type RingSig<const L: usize, const K: usize> = vec::Vec<RingSigPart<L, K>>;
@@ -35,7 +35,6 @@ type RingSig<const L: usize, const K: usize> = vec::Vec<RingSigPart<L, K>>;
 struct RingSigCtx<const L: usize, const K: usize, const W1PACKEDLEN: usize> {
     rho: [u8; SEEDBYTES],
     z: [poly::Poly; L],
-    hints: [poly::Poly; K],
     ctilde: [u8; SEEDBYTES],
     w1packed: [[u8; W1PACKEDLEN]; K],
 }
@@ -121,12 +120,13 @@ where
 {
     // Simulate other signatures
     let mut ringsigs: vec::Vec<RingSigCtx<L, K, W1PACKEDLEN>> = vec::Vec::new();
-    for pubkey in other_pubkeys {
+    let mut other_pubkeys = vec::Vec::from(other_pubkeys);
+    other_pubkeys.sort_by_key(|pk| pk.rho);
+    for pubkey in &other_pubkeys {
         ringsigs.push(dilithium_ring_simulate::<K, L, KL, W1PACKEDLEN, R>(
             &mut rng, p, pubkey,
         ));
     }
-    ringsigs.sort_by_key(|ctx| ctx.rho);
 
     // Precompute mu
     let mut keccak = keccak::KeccakState::default();
@@ -174,90 +174,79 @@ where
 {
     let mut keccak = keccak::KeccakState::default();
 
-    // Sample random ctile
-    let mut ctilde = [0; SEEDBYTES];
-    rng.fill_bytes(&mut ctilde);
-
-    // Sample random z below ||gamma1 - beta||
-    let mut z = [poly::Poly::zero(); L];
-    poly::polyvec_pointwise(&mut z, &mut |_| {
-        rng.gen_range(-p.gamma1 + p.beta + 1..=p.gamma1 - p.beta - 1)
-    });
-    let mut zhat = z;
-    ntt::polyvec_ntt(&mut zhat);
-
-    // Compute Az
-    let mut mat = [poly::Poly::zero(); KL];
-    expanda::polyvec_matrix_expand(p, &mut keccak, &mut mat, &pk.rho);
-    let mut az = [poly::Poly::zero(); K];
-    poly::polyvec_matrix_pointwise_montgomery(p, &mut az, &mat, &z);
-    ntt::polyvec_invntt_tomont(&mut az);
-
-    // Sample challenge
-    let mut c = poly::Poly::zero();
-    challenge::sample_in_ball(p, &mut c, &ctilde, &mut keccak);
-    let mut chat = c;
-    ntt::poly_ntt(&mut chat);
-
-    // Extract t1 and t0
-    let mut t = pk.t;
-    let mut t1 = pk.t;
-    let mut t0 = pk.t;
-    poly::polyvec_pointwise(&mut t, &mut crate::reduce::caddq);
-    for (t0_elem, t1_elem) in &mut t0.iter_mut().zip(&mut t1.iter_mut()) {
-        for (t0_coeff, t1_coeff) in t0_elem.coeffs.iter_mut().zip(t1_elem.coeffs.iter_mut()) {
-            (*t0_coeff, *t1_coeff) = crate::rounding::power2round(*t1_coeff);
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        if attempt > p.max_attempts {
+            panic!("max attempts exceeded");
         }
-    }
 
-    // Compute ct, ct1, and ct0
-    let mulc = |v: [poly::Poly; K]| {
-        let mut vhat = v;
-        ntt::polyvec_ntt(&mut vhat);
-        poly::polyvec_pointwise_montgomery_inplace(&mut vhat, &chat);
-        ntt::polyvec_invntt_tomont(&mut vhat);
-        let mut cv = vhat;
-        poly::polyvec_pointwise(&mut cv, &mut reduce::reduce32);
-        cv
-    };
-    let ct = mulc(t);
-    let ct0 = mulc(t0);
+        // Sample random ctile
+        let mut ctilde = [0; SEEDBYTES];
+        rng.fill_bytes(&mut ctilde);
 
-    // Perform r0-check
-    if poly::polyvec_chknorm(&ct0, p.gamma2).is_err() {
-        todo!("{:?}", &ct0);
-    }
+        // Sample random z below ||gamma1 - beta||
+        let mut z = [poly::Poly::zero(); L];
+        poly::polyvec_pointwise(&mut z, &mut |_| {
+            rng.gen_range(-p.gamma1 + p.beta + 1..=p.gamma1 - p.beta - 1)
+        });
+        let mut zhat = z;
+        ntt::polyvec_ntt(&mut zhat);
 
-    // Compute r = Az - ct
-    let mut r = az;
-    poly::polyvec_sub(&mut r, &ct);
-    poly::polyvec_pointwise(&mut r, &mut reduce::reduce32);
-    poly::polyvec_pointwise(&mut r, &mut reduce::caddq);
+        // Sample challenge
+        let mut c = poly::Poly::zero();
+        challenge::sample_in_ball(p, &mut c, &ctilde, &mut keccak);
+        let mut chat = c;
+        ntt::poly_ntt(&mut chat);
 
-    // Compute hints
-    let mut r0 = [poly::Poly::zero(); K];
-    poly::polyveck_decompose(p, &mut r, &mut r0);
-    let r1 = r;
-    poly::polyvec_add(&mut r0, &ct0);
-    let hints_popcount = poly::polyvec_make_hint(p, &mut r0, &r);
-    if hints_popcount > p.omega {
-        todo!("cannot construct hints that will recover r");
-    }
-    let hints = r0;
+        // Compute A*z
+        let mut mat = [poly::Poly::zero(); KL];
+        expanda::polyvec_matrix_expand(p, &mut keccak, &mut mat, &pk.rho);
+        let mut az = [poly::Poly::zero(); K];
+        poly::polyvec_matrix_pointwise_montgomery(p, &mut az, &mat, &zhat);
+        ntt::polyvec_invntt_tomont(&mut az);
 
-    // Pack computed r1 into the commitment w1
-    let mut w1packed = [[0; W1PACKEDLEN]; K];
-    for i in 0..p.k {
-        packing::pack_poly_w1(p, &mut w1packed[i], &r1[i]);
-    }
+        // Compute c*t
+        let mut that = pk.t;
+        ntt::polyvec_ntt(&mut that);
+        poly::polyvec_pointwise_montgomery_inplace(&mut that, &chat);
+        ntt::polyvec_invntt_tomont(&mut that);
+        let mut ct = that;
+        poly::polyvec_pointwise(&mut ct, &mut reduce::reduce32);
+        poly::polyvec_pointwise(&mut ct, &mut reduce::caddq);
 
-    // Return ~c, w1
-    RingSigCtx {
-        rho: pk.rho,
-        z,
-        hints,
-        ctilde,
-        w1packed,
+        // Compute r1 and r0
+        let mut r = az;
+        poly::polyvec_sub(&mut r, &ct);
+        poly::polyvec_pointwise(&mut r, &mut reduce::reduce32);
+        poly::polyvec_pointwise(&mut r, &mut reduce::caddq);
+        let mut r1 = r;
+        let mut r0 = r;
+        poly::polyvec_pointwise(&mut r1, &mut |coeff| rounding::highbits(p, coeff));
+        poly::polyvec_pointwise(&mut r0, &mut |coeff| rounding::lowbits(p, coeff));
+
+        // Do r0-check
+        if poly::polyvec_chknorm(&r0, p.gamma2 - p.beta).is_err() {
+            continue;
+        }
+
+        std::println!("simulating: {}", r1[0].coeffs[0]);
+
+        // Pack computed r1 into the commitment w1
+        let mut w1packed = [[0; W1PACKEDLEN]; K];
+        for i in 0..p.k {
+            packing::pack_poly_w1(p, &mut w1packed[i], &r1[i]);
+        }
+
+        debug_assert_eq!(&compute_commitment(p, mat, z, c, pk.t), &r1);
+
+        // Return ~c, w1
+        return RingSigCtx {
+            rho: pk.rho,
+            z,
+            ctilde,
+            w1packed,
+        };
     }
 }
 
@@ -278,8 +267,6 @@ fn dilithium_ring_real<
     let mut nonce = 0u16;
     let mut mat = [poly::Poly::zero(); KL];
     let mut y = [poly::Poly::zero(); L];
-    let mut t1 = [poly::Poly::zero(); K];
-    let mut t0 = [poly::Poly::zero(); K];
     let mut w1 = [poly::Poly::zero(); K];
     let mut w0 = [poly::Poly::zero(); K];
     let mut h = [poly::Poly::zero(); K];
@@ -289,16 +276,6 @@ fn dilithium_ring_real<
 
     let mut s1 = sk.s1;
     let mut s2 = sk.s2;
-
-    // Extract t1 and t0
-    for idx in 0..K {
-        for idx2 in 0..N {
-            let t_coeff = pk.t[idx].coeffs[idx2];
-            let (t0_coeff, t1_coeff) = crate::rounding::power2round(t_coeff);
-            t0[idx].coeffs[idx2] = t0_coeff;
-            t1[idx].coeffs[idx2] = t1_coeff;
-        }
-    }
 
     // Compute rhoprime := CRH(K || mu)
     let mut xof = keccak::SHAKE256::new(&mut keccak);
@@ -310,7 +287,6 @@ fn dilithium_ring_real<
     crate::expanda::polyvec_matrix_expand(p, &mut keccak, &mut mat, &pk.rho);
     crate::ntt::polyvec_ntt(&mut s1);
     crate::ntt::polyvec_ntt(&mut s2);
-    crate::ntt::polyvec_ntt(&mut t0);
 
     let mut attempt = 0;
     'rej: loop {
@@ -351,12 +327,11 @@ fn dilithium_ring_real<
             .map(|(_, w1packed)| w1packed)
             .collect();
         let mut ctilde = compute_challenge(mu, &commitments);
-        std::dbg!(ctilde);
 
         // Compute c1 = c - c2 - c3 - ...
-        for ctx in simulated {
+        for cx in simulated {
             for idx in 0..SEEDBYTES {
-                ctilde[idx] ^= ctx.ctilde[idx];
+                ctilde[idx] ^= cx.ctilde[idx];
             }
         }
         crate::challenge::sample_in_ball(p, &mut cp, &ctilde, &mut keccak);
@@ -381,23 +356,14 @@ fn dilithium_ring_real<
             continue 'rej;
         }
 
-        // Compute hints for w1
-        poly::polyvec_pointwise_montgomery(&mut h, &cp, &t0);
-        crate::ntt::polyvec_invntt_tomont(&mut h);
-        poly::polyvec_pointwise(&mut h, &mut crate::reduce::reduce32);
-        if poly::polyvec_chknorm(&h, p.gamma2).is_err() {
-            continue 'rej;
-        }
-        poly::polyvec_add(&mut w0, &h);
-        let hints_popcount = poly::polyvec_make_hint(p, &mut w0, &w1);
-        if hints_popcount > p.omega {
-            continue 'rej;
+        std::println!("generate: {:X?}", w1[0].coeffs[0]);
+        for commitment in commitments {
+            std::println!("generate: {:X?}", commitment[0]);
         }
 
         // Write signature
         return RingSigCtx {
             ctilde,
-            hints: w0,
             rho: pk.rho,
             z,
             w1packed,
@@ -408,6 +374,66 @@ fn dilithium_ring_real<
     // I just wrote this function, but nothing has been tested yet.
     // We should now add debug tests to ensure that the ring signatures are
     // correctly generated.
+}
+
+fn dilithium_ring_verify<
+    const L: usize,
+    const K: usize,
+    const KL: usize,
+    const W1PACKEDLEN: usize,
+>(
+    p: &DilithiumParams,
+    pks: &[RingPubKey<K>],
+    msg: &[u8],
+    sigs: &[RingSigCtx<L, K, W1PACKEDLEN>],
+) -> bool {
+    // TODO: `sig` type should be an actual sig (not context)
+
+    assert_eq!(sigs.len(), pks.len());
+    let keccak = &mut crate::keccak::KeccakState::default();
+
+    // Compute mu
+    let rhos = pks.iter().map(|pk| pk.rho).collect::<vec::Vec<_>>();
+    let mu = compute_mu(&rhos, msg);
+
+    // For all signatures, compute the corresponding commitments
+    let mut commitments = vec::Vec::with_capacity(sigs.len());
+    for (pk, sig) in Iterator::zip(pks.iter(), sigs.iter()) {
+        // Check z norm
+        if poly::polyvec_chknorm(&sig.z, p.gamma1 - p.beta).is_err() {
+            return false;
+        }
+
+        // Expand matrix
+        let mut mat = [poly::Poly::zero(); KL];
+        expanda::polyvec_matrix_expand(p, keccak, &mut mat, &pk.rho);
+
+        // Sample challenge
+        let mut c = poly::Poly::zero();
+        crate::challenge::sample_in_ball(p, &mut c, &sig.ctilde, keccak);
+
+        // Compute commitment
+        let w1 = compute_commitment(p, mat, sig.z, c, pk.t);
+        let mut w1packed = [[0; W1PACKEDLEN]; K];
+        for idx in 0..K {
+            packing::pack_poly_w1(p, &mut w1packed[idx], &w1[idx]);
+        }
+        commitments.push(w1packed);
+    }
+
+    // Compute main challenge
+    let main_ctilde = compute_challenge(&mu, &commitments);
+
+    // Check if the parts-challenges sum to the main challenge
+    let mut parts_ctilde = [0; SEEDBYTES];
+    for sig in sigs {
+        for idx in 0..SEEDBYTES {
+            parts_ctilde[idx] ^= sig.ctilde[idx];
+        }
+    }
+
+    assert_eq!(parts_ctilde, main_ctilde);
+    true
 }
 
 fn compute_mu(rhos: &[[u8; SEEDBYTES]], msg: &[u8]) -> [u8; CRHBYTES] {
@@ -439,6 +465,34 @@ fn compute_challenge<const K: usize, const W1PACKEDLEN: usize>(
     let mut ctilde = [0; SEEDBYTES];
     xof.finalize_xof().read(&mut ctilde);
     ctilde
+}
+
+fn compute_commitment<const L: usize, const K: usize, const KL: usize>(
+    p: &DilithiumParams,
+    mat: [poly::Poly; KL],
+    mut z: [poly::Poly; L],
+    mut c: poly::Poly,
+    mut t: [poly::Poly; K],
+) -> [poly::Poly; K] {
+    // Compute A*z
+    ntt::polyvec_ntt(&mut z);
+    let mut az = [poly::Poly::zero(); K];
+    poly::polyvec_matrix_pointwise_montgomery(p, &mut az, &mat, &z);
+    ntt::polyvec_invntt_tomont(&mut az);
+
+    // Compute A*z - c*t
+    ntt::poly_ntt(&mut c);
+    ntt::polyvec_ntt(&mut t);
+    poly::polyvec_pointwise_montgomery_inplace(&mut t, &c);
+    ntt::polyvec_invntt_tomont(&mut t);
+    poly::polyvec_sub(&mut az, &t);
+    poly::polyvec_pointwise(&mut az, &mut reduce::reduce32);
+    poly::polyvec_pointwise(&mut az, &mut reduce::caddq);
+
+    // Compute w1' := HighBits(r)
+    let mut w1 = az;
+    poly::polyvec_pointwise(&mut w1, &mut |coeff| rounding::highbits(p, coeff));
+    w1
 }
 
 #[cfg(test)]
@@ -480,12 +534,13 @@ mod tests {
 
     fn setup_sig<const L: usize, const K: usize, const KL: usize, const W1PACKEDLEN: usize>(
         p: &DilithiumParams,
+        seed: u64,
     ) -> (
         (RingSecretKey<L, K>, RingPubKey<K>),
         vec::Vec<RingPubKey<K>>,
         vec::Vec<RingSigCtx<L, K, W1PACKEDLEN>>,
     ) {
-        let mut rng = NotRandom { i: 0 };
+        let mut rng = NotRandom { i: seed };
         let mut seed1 = [0u8; 32];
         rng.fill_bytes(&mut seed1);
         let mut seed2 = [0u8; 32];
@@ -508,19 +563,40 @@ mod tests {
     #[test]
     fn test_challenges_sum() {
         const p: DilithiumParams = DILITHIUM2;
-        let ((sk0, pk0), pks, sig) =
-            setup_sig::<{ p.l }, { p.k }, { p.l * p.k }, { p.w1_poly_packed_len }>(&p);
 
-        let mut ctilde_from_parts = [0; SEEDBYTES];
-        for part in &sig {
-            for idx in 0..SEEDBYTES {
-                ctilde_from_parts[idx] ^= part.ctilde[idx];
+        for i in 0..1000 {
+            let (_, pks, sig) =
+                setup_sig::<{ p.l }, { p.k }, { p.l * p.k }, { p.w1_poly_packed_len }>(&p, i);
+
+            let mut ctilde_from_parts = [0; SEEDBYTES];
+            for part in &sig {
+                for idx in 0..SEEDBYTES {
+                    ctilde_from_parts[idx] ^= part.ctilde[idx];
+                }
             }
+
+            let mu = compute_mu(&[pks[0].rho, pks[1].rho], &[]);
+            let ctilde_from_commitments =
+                compute_challenge(&mu, &[sig[0].w1packed, sig[1].w1packed]);
+
+            assert_eq!(ctilde_from_parts, ctilde_from_commitments);
         }
+    }
 
-        let mu = compute_mu(&[pks[0].rho, pks[1].rho], &[]);
-        let ctilde_from_commitments = compute_challenge(&mu, &[sig[0].w1packed, sig[1].w1packed]);
+    #[test]
+    fn test_verify_functional() {
+        const p: DilithiumParams = DILITHIUM2;
+        for i in 0..1000 {
+            let (_, pks, sig) =
+                setup_sig::<{ p.l }, { p.k }, { p.l * p.k }, { p.w1_poly_packed_len }>(&p, i);
 
-        assert_eq!(ctilde_from_parts, ctilde_from_commitments);
+            let verified = dilithium_ring_verify::<
+                { p.l },
+                { p.k },
+                { p.l * p.k },
+                { p.w1_poly_packed_len },
+            >(&p, &pks, &[], &sig);
+            assert!(verified);
+        }
     }
 }

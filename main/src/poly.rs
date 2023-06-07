@@ -1,6 +1,6 @@
 use crate::{params::*, reduce};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) struct Poly {
     pub(crate) coeffs: [i32; N],

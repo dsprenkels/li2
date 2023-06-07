@@ -26,6 +26,16 @@ pub(crate) fn decompose(p: &DilithiumParams, a: i32) -> (i32, i32) {
 }
 
 #[must_use]
+pub(crate) fn highbits(p: &DilithiumParams, a: i32) -> i32 {
+    decompose(p, a).0
+}
+
+#[must_use]
+pub(crate) fn lowbits(p: &DilithiumParams, a: i32) -> i32 {
+    decompose(p, a).1
+}
+
+#[must_use]
 pub(crate) fn use_hint(p: &DilithiumParams, coeff: i32, hint: i32) -> i32 {
     let (a1, a0) = decompose(p, coeff);
     if hint == 0 {
