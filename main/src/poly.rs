@@ -1,8 +1,10 @@
 use crate::{params::*, reduce};
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) struct Poly {
+    #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     pub(crate) coeffs: [i32; N],
 }
 

@@ -11,22 +11,28 @@ use digest::{ExtendableOutput, Update, XofReader};
 use rand::{self, Rng};
 use std::vec;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct RingSecretKey<const L: usize, const K: usize> {
-    key: [u8; SEEDBYTES],
+    #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     s1: [poly::Poly; L],
+    #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     s2: [poly::Poly; K],
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct RingPubKey<const K: usize> {
     rho: [u8; SEEDBYTES],
+    #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     t: [poly::Poly; K],
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct RingSigPart<const L: usize, const K: usize> {
     ctilde: [u8; SEEDBYTES],
+    #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     z: [poly::Poly; L],
 }
 
@@ -40,7 +46,7 @@ struct RingSigCtx<const L: usize, const K: usize, const W1PACKEDLEN: usize> {
     w1packed: [[u8; W1PACKEDLEN]; K],
 }
 
-fn ctx_into_sig<const L: usize, const K: usize, const W1PACKEDLEN: usize>(
+fn ctx_to_sig<const L: usize, const K: usize, const W1PACKEDLEN: usize>(
     ringsigs: &[RingSigCtx<L, K, W1PACKEDLEN>],
 ) -> RingSig<L, K> {
     ringsigs
@@ -117,7 +123,7 @@ fn dilithium_ring_keypair<
     let (rho, seedbuf) = &mut seedbuf.split_at_mut(SEEDBYTES);
     let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
     let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-    debug_assert_eq!(seedbuf, &[]);
+    debug_assert!(&seedbuf.is_empty());
 
     // Expand matrix
     crate::expanda::polyvec_matrix_expand(p, &mut keccak, &mut mat, rho);
@@ -144,14 +150,7 @@ fn dilithium_ring_keypair<
     rhobuf.copy_from_slice(rho);
     let mut keybuf = [0; SEEDBYTES];
     keybuf.copy_from_slice(key);
-    (
-        RingSecretKey {
-            key: keybuf,
-            s1,
-            s2,
-        },
-        RingPubKey { rho: rhobuf, t },
-    )
+    (RingSecretKey { s1, s2 }, RingPubKey { rho: rhobuf, t })
 }
 
 pub fn dilithium2_ring_signature<R>(
@@ -234,7 +233,7 @@ where
         other_pubkeys,
         msg,
     );
-    ctx_into_sig(&ringsigs)
+    ctx_to_sig(&ringsigs)
 }
 
 fn dilithium_ring_signature_inner<
@@ -282,7 +281,7 @@ where
     let mu = compute_mu(&rhos, msg);
 
     // Start making the "real" signature
-    let real = dilithium_ring_real::<K, L, KL, W1PACKEDLEN>(p, sk, pk, &mu, &ringsigs);
+    let real = dilithium_ring_real::<K, L, KL, W1PACKEDLEN, _>(p, rng, sk, pk, &mu, &ringsigs);
     ringsigs.push(real);
     ringsigs.sort_by_key(|ctx| ctx.rho);
     ringsigs
@@ -383,13 +382,18 @@ fn dilithium_ring_real<
     const L: usize,
     const KL: usize,
     const W1PACKEDLEN: usize,
+    R,
 >(
     p: &DilithiumParams,
+    rng: &mut R,
     sk: &RingSecretKey<L, K>,
     pk: &RingPubKey<K>,
     mu: &[u8; CRHBYTES],
     simulated: &[RingSigCtx<L, K, W1PACKEDLEN>],
-) -> RingSigCtx<L, K, W1PACKEDLEN> {
+) -> RingSigCtx<L, K, W1PACKEDLEN>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
     let mut w1packed = [[0; W1PACKEDLEN]; K];
 
     let mut nonce = 0u16;
@@ -405,11 +409,11 @@ fn dilithium_ring_real<
     let mut s1 = sk.s1;
     let mut s2 = sk.s2;
 
-    // Compute rhoprime := CRH(K || mu)
-    let mut xof = keccak::SHAKE256::new(&mut keccak);
-    xof.update(&sk.key);
-    xof.update(mu);
-    xof.finalize_xof().read(&mut rhoprime);
+    // Generate a random rhoprime
+    // NOTE: This is different from regular Dilithium, as we do not want to
+    // generate the same signature part if we sign the same message twice.
+    // This would make the signatures linkable.
+    rng.fill_bytes(&mut rhoprime);
 
     // Expand matrix and transform vectors
     crate::expanda::polyvec_matrix_expand(p, &mut keccak, &mut mat, &pk.rho);
@@ -755,9 +759,11 @@ mod tests {
         for i in 0..TESTS {
             let (_, pks, sig) =
                 setup_sig::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(&P, i);
+
+            // Check that the public keys are sorted
             assert!(sig.windows(2).all(|w| w[0].rho < w[1].rho));
 
-            let sig = ctx_into_sig(&sig);
+            let sig = ctx_to_sig(&sig);
 
             let verified = dilithium_ring_verify::<
                 { P.l },
@@ -769,5 +775,51 @@ mod tests {
             // Assert that sig.rhos are sorted
             assert!(verified);
         }
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_secret_key() {
+        // Test that generated `ring` key pairs are equal to the `fast` keys.
+        todo!();
+    }
+
+    #[test]
+    fn test_vector() {
+        const P: DilithiumParams = DILITHIUM2;
+        let (sk, pks, sig) =
+            setup_sig::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(&P, 0);
+        let sig = ctx_to_sig(&sig);
+
+        let buf = [0; 128 * 1024];
+        let mut cursor = std::io::Cursor::new(buf);
+
+        let mut keccak = keccak::KeccakState::default();
+        let mut xof = keccak::SHAKE256::new(&mut keccak);
+        xof.update(b"kat test for dilithium2 ring vectors\n");
+
+        serde_json::to_writer(&mut cursor, &sk).unwrap();
+        xof.update(b"sk\n");
+        xof.update(buf[..cursor.position() as usize].as_ref());
+        cursor.set_position(0);
+
+        serde_json::to_writer(&mut cursor, &pks).unwrap();
+        xof.update(b"pks\n");
+        xof.update(buf[..cursor.position() as usize].as_ref());
+        cursor.set_position(0);
+
+        serde_json::to_writer(&mut cursor, &sig).unwrap();
+        xof.update(b"sig\n");
+        xof.update(buf[..cursor.position() as usize].as_ref());
+        cursor.set_position(0);
+
+        let mut hash = [0; SEEDBYTES];
+        xof.finalize_xof().read(&mut hash);
+
+        let expected = [
+            17, 110, 187, 23, 243, 129, 67, 65, 133, 92, 63, 229, 63, 205, 13, 13, 79, 35, 245,
+            115, 173, 94, 32, 82, 161, 136, 220, 102, 250, 165, 75, 245,
+        ];
+        assert_eq!(hash, expected);
     }
 }

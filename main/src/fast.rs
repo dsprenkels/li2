@@ -77,7 +77,7 @@ fn dilithium_keygen_from_seed<const K: usize, const L: usize, const KL: usize>(
     let (rho, seedbuf) = &mut seedbuf.split_at_mut(SEEDBYTES);
     let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
     let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-    debug_assert_eq!(seedbuf, &[]);
+    debug_assert!(seedbuf.is_empty());
 
     // Expand matrix
     crate::expanda::polyvec_matrix_expand(p, &mut keccak, &mut mat, rho);

@@ -424,7 +424,7 @@ fn keccak_absorb(s: &mut [u64; 25], mut pos: usize, rate: usize, mut input: &[u8
         pos += 1;
     }
 
-    debug_assert_eq!(input, &[]);
+    debug_assert!(input.is_empty());
     pos
 }
 
@@ -445,6 +445,6 @@ fn keccak_squeeze(mut out: &mut [u8], s: &mut [u64; 25], mut pos: usize, rate: u
             pos += 1;
         }
     }
-    assert_eq!(out, &[]);
+    debug_assert!(out.is_empty());
     pos
 }
