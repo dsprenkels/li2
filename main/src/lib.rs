@@ -44,3 +44,6 @@ pub use fast::*;
 pub use small::*;
 
 pub use params::*;
+
+#[cfg(feature = "ring")]
+pub use ring::*;

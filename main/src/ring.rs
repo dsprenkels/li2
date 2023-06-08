@@ -9,27 +9,25 @@ use rand::{self, Rng};
 use std::vec;
 
 #[derive(Debug, Clone, Copy)]
-struct RingSecretKey<const L: usize, const K: usize> {
+pub struct RingSecretKey<const L: usize, const K: usize> {
     key: [u8; SEEDBYTES],
     s1: [poly::Poly; L],
     s2: [poly::Poly; K],
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RingPubKey<const K: usize> {
+pub struct RingPubKey<const K: usize> {
     rho: [u8; SEEDBYTES],
     t: [poly::Poly; K],
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RingSigPart<const L: usize, const K: usize> {
-    // XXX: ctilde and rho are only here for debugging for now
+pub struct RingSigPart<const L: usize, const K: usize> {
     ctilde: [u8; SEEDBYTES],
-    rho: [u8; SEEDBYTES],
     z: [poly::Poly; L],
 }
 
-type RingSig<const L: usize, const K: usize> = vec::Vec<RingSigPart<L, K>>;
+pub type RingSig<const L: usize, const K: usize> = vec::Vec<RingSigPart<L, K>>;
 
 #[derive(Debug, Clone, Copy)]
 struct RingSigCtx<const L: usize, const K: usize, const W1PACKEDLEN: usize> {
@@ -40,8 +38,8 @@ struct RingSigCtx<const L: usize, const K: usize, const W1PACKEDLEN: usize> {
 }
 
 fn dilithium_ring_keypair<
-    const K: usize,
     const L: usize,
+    const K: usize,
     const KL: usize,
     const W1PACKEDLEN: usize,
 >(
@@ -101,15 +99,104 @@ fn dilithium_ring_keypair<
     )
 }
 
+pub fn dilithium2_ring_signature<R>(
+    rng: &mut R,
+    sk: &RingSecretKey<{ DILITHIUM2.l }, { DILITHIUM2.k }>,
+    pk: &RingPubKey<{ DILITHIUM2.k }>,
+    other_pubkeys: &[RingPubKey<{ DILITHIUM2.k }>],
+    msg: &[u8],
+) -> RingSig<{ DILITHIUM2.l }, { DILITHIUM2.k }>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
+    dilithium_ring_signature::<
+        { DILITHIUM2.l },
+        { DILITHIUM2.k },
+        { DILITHIUM2.l * DILITHIUM2.k },
+        { DILITHIUM2.w1_poly_packed_len },
+        R,
+    >(&DILITHIUM2, rng, sk, pk, other_pubkeys, msg)
+}
+pub fn dilithium3_ring_signature<R>(
+    rng: &mut R,
+    sk: &RingSecretKey<{ DILITHIUM3.l }, { DILITHIUM3.k }>,
+    pk: &RingPubKey<{ DILITHIUM3.k }>,
+    other_pubkeys: &[RingPubKey<{ DILITHIUM3.k }>],
+    msg: &[u8],
+) -> RingSig<{ DILITHIUM3.l }, { DILITHIUM3.k }>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
+    dilithium_ring_signature::<
+        { DILITHIUM3.l },
+        { DILITHIUM3.k },
+        { DILITHIUM3.l * DILITHIUM3.k },
+        { DILITHIUM3.w1_poly_packed_len },
+        R,
+    >(&DILITHIUM3, rng, sk, pk, other_pubkeys, msg)
+}
+pub fn dilithium5_ring_signature<R>(
+    rng: &mut R,
+    sk: &RingSecretKey<{ DILITHIUM5.l }, { DILITHIUM5.k }>,
+    pk: &RingPubKey<{ DILITHIUM5.k }>,
+    other_pubkeys: &[RingPubKey<{ DILITHIUM5.k }>],
+    msg: &[u8],
+) -> RingSig<{ DILITHIUM5.l }, { DILITHIUM5.k }>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
+    dilithium_ring_signature::<
+        { DILITHIUM5.l },
+        { DILITHIUM5.k },
+        { DILITHIUM5.l * DILITHIUM5.k },
+        { DILITHIUM5.w1_poly_packed_len },
+        R,
+    >(&DILITHIUM5, rng, sk, pk, other_pubkeys, msg)
+}
+
 fn dilithium_ring_signature<
-    const K: usize,
     const L: usize,
+    const K: usize,
     const KL: usize,
     const W1PACKEDLEN: usize,
     R,
 >(
     p: &DilithiumParams,
-    mut rng: R,
+    rng: &mut R,
+    sk: &RingSecretKey<L, K>,
+    pk: &RingPubKey<K>,
+    other_pubkeys: &[RingPubKey<K>],
+    msg: &[u8],
+) -> RingSig<L, K>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
+    let ringsigs = dilithium_ring_signature_inner::<L, K, KL, W1PACKEDLEN, R>(
+        p,
+        rng,
+        sk,
+        pk,
+        other_pubkeys,
+        msg,
+    );
+    ringsigs
+        .into_iter()
+        .map(|cx| RingSigPart {
+            ctilde: cx.ctilde,
+            z: cx.z,
+        })
+        .collect()
+}
+
+fn dilithium_ring_signature_inner<
+    const L: usize,
+    const K: usize,
+    const KL: usize,
+    const W1PACKEDLEN: usize,
+    R,
+>(
+    p: &DilithiumParams,
+    rng: &mut R,
     sk: &RingSecretKey<L, K>,
     pk: &RingPubKey<K>,
     other_pubkeys: &[RingPubKey<K>],
@@ -118,13 +205,16 @@ fn dilithium_ring_signature<
 where
     R: rand::RngCore + rand::CryptoRng,
 {
+    // Assert that the other pubkeys are already sorted
+    assert!(other_pubkeys.windows(2).all(|w| w[0].rho < w[1].rho));
+
     // Simulate other signatures
     let mut ringsigs: vec::Vec<RingSigCtx<L, K, W1PACKEDLEN>> = vec::Vec::new();
     let mut other_pubkeys = vec::Vec::from(other_pubkeys);
     other_pubkeys.sort_by_key(|pk| pk.rho);
     for pubkey in &other_pubkeys {
         ringsigs.push(dilithium_ring_simulate::<K, L, KL, W1PACKEDLEN, R>(
-            &mut rng, p, pubkey,
+            rng, p, pubkey,
         ));
     }
 
@@ -146,15 +236,6 @@ where
     let real = dilithium_ring_real::<K, L, KL, W1PACKEDLEN>(p, sk, pk, &mu, &ringsigs);
     ringsigs.push(real);
     ringsigs.sort_by_key(|ctx| ctx.rho);
-    // ringsigs
-    //     .into_iter()
-    //     .map(|cx| RingSigPart {
-    //         ctilde: cx.ctilde,
-    //         rho: cx.rho,
-    //         z: cx.z,
-    //         hints: cx.hints,
-    //     })
-    //     .collect()
     ringsigs
 }
 
@@ -229,8 +310,6 @@ where
         if poly::polyvec_chknorm(&r0, p.gamma2 - p.beta).is_err() {
             continue;
         }
-
-        std::println!("simulating: {}", r1[0].coeffs[0]);
 
         // Pack computed r1 into the commitment w1
         let mut w1packed = [[0; W1PACKEDLEN]; K];
@@ -334,7 +413,9 @@ fn dilithium_ring_real<
                 ctilde[idx] ^= cx.ctilde[idx];
             }
         }
-        crate::challenge::sample_in_ball(p, &mut cp, &ctilde, &mut keccak);
+        let mut c = poly::Poly::zero();
+        crate::challenge::sample_in_ball(p, &mut c, &ctilde, &mut keccak);
+        cp = c;
         crate::ntt::poly_ntt(&mut cp);
 
         // Compute z, reject if it reveals secret
@@ -354,11 +435,6 @@ fn dilithium_ring_real<
         poly::polyvec_pointwise(&mut w0, &mut crate::reduce::reduce32);
         if poly::polyvec_chknorm(&w0, p.gamma2 - p.beta).is_err() {
             continue 'rej;
-        }
-
-        std::println!("generate: {:X?}", w1[0].coeffs[0]);
-        for commitment in commitments {
-            std::println!("generate: {:X?}", commitment[0]);
         }
 
         // Write signature
@@ -506,6 +582,8 @@ mod tests {
         i: u64,
     }
 
+    const TESTS: u64 = 1000;
+
     impl rand::RngCore for NotRandom {
         fn next_u32(&mut self) -> u32 {
             self.i += 1;
@@ -545,10 +623,10 @@ mod tests {
         rng.fill_bytes(&mut seed1);
         let mut seed2 = [0u8; 32];
         rng.fill_bytes(&mut seed2);
-        let (sk0, pk0) = dilithium_ring_keypair::<K, L, KL, W1PACKEDLEN>(p, &seed1);
-        let (_, pk1) = dilithium_ring_keypair::<K, L, KL, W1PACKEDLEN>(p, &seed2);
+        let (sk0, pk0) = dilithium_ring_keypair::<L, K, KL, W1PACKEDLEN>(p, &seed1);
+        let (_, pk1) = dilithium_ring_keypair::<L, K, KL, W1PACKEDLEN>(p, &seed2);
 
-        let sig = dilithium_ring_signature::<K, L, KL, W1PACKEDLEN, _>(
+        let sig = dilithium_ring_signature_inner::<L, K, KL, W1PACKEDLEN, _>(
             p,
             &mut rng,
             &sk0,
@@ -557,16 +635,18 @@ mod tests {
             &[],
         );
 
-        ((sk0, pk0), vec![pk0, pk1], sig)
+        let mut pks = vec![pk0, pk1];
+        pks.sort_by_key(|pk| pk.rho);
+        ((sk0, pk0), pks, sig)
     }
 
     #[test]
     fn test_challenges_sum() {
-        const p: DilithiumParams = DILITHIUM2;
+        const P: DilithiumParams = DILITHIUM2;
 
-        for i in 0..1000 {
+        for i in 0..TESTS {
             let (_, pks, sig) =
-                setup_sig::<{ p.l }, { p.k }, { p.l * p.k }, { p.w1_poly_packed_len }>(&p, i);
+                setup_sig::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(&P, i);
 
             let mut ctilde_from_parts = [0; SEEDBYTES];
             for part in &sig {
@@ -585,17 +665,20 @@ mod tests {
 
     #[test]
     fn test_verify_functional() {
-        const p: DilithiumParams = DILITHIUM2;
-        for i in 0..1000 {
+        const P: DilithiumParams = DILITHIUM2;
+        for i in 0..TESTS {
             let (_, pks, sig) =
-                setup_sig::<{ p.l }, { p.k }, { p.l * p.k }, { p.w1_poly_packed_len }>(&p, i);
+                setup_sig::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(&P, i);
 
             let verified = dilithium_ring_verify::<
-                { p.l },
-                { p.k },
-                { p.l * p.k },
-                { p.w1_poly_packed_len },
-            >(&p, &pks, &[], &sig);
+                { P.l },
+                { P.k },
+                { P.l * P.k },
+                { P.w1_poly_packed_len },
+            >(&P, &pks, &[], &sig);
+
+            // Assert that sig.rhos are sorted
+            assert!(sig.windows(2).all(|w| w[0].rho < w[1].rho));
             assert!(verified);
         }
     }

@@ -22,6 +22,6 @@ static_assertions = "1.1.0"
 basic-api = []
 default = ["std", "fast"]
 fast = []
-ring = ["std", "fast", "rand"]
+ring = ["std", "rand"]
 small = []
 std = ["digest/std", "signature/std"]
