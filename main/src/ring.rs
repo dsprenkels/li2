@@ -36,7 +36,7 @@ pub struct RingSigPart<const L: usize, const K: usize> {
     z: [poly::Poly; L],
 }
 
-pub type RingSig<const L: usize, const K: usize> = vec::Vec<RingSigPart<L, K>>;
+pub type RingSig<const L: usize, const K: usize> = Vec<RingSigPart<L, K>>;
 
 #[derive(Debug, Clone, Copy)]
 struct RingSigCtx<const L: usize, const K: usize, const W1PACKEDLEN: usize> {

@@ -12,10 +12,7 @@
     trivial_numeric_casts,
     unused_qualifications
 )]
-#![no_std]
-
-#[cfg(feature="std")]
-extern crate std;
+#[cfg_attr(not(feature = "std"), no_std)]
 
 pub type Error = signature::Error;
 

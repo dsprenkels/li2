@@ -44,14 +44,12 @@ pub(crate) fn pack_sk(
     debug_assert_eq!(offset, p.secret_key_len);
 }
 
-
-
 pub(crate) fn sk_split<'a>(
     p: &DilithiumParams,
-    sk: &'a[u8],
-) -> (&'a[u8], &'a[u8], &'a[u8], &'a[u8], &'a[u8], &'a[u8]) {
+    sk: &'a [u8],
+) -> (&'a [u8], &'a [u8], &'a [u8], &'a [u8], &'a [u8], &'a [u8]) {
     debug_assert_eq!(sk.len(), p.secret_key_len);
-    
+
     let (rho, sk) = sk.split_at(SEEDBYTES);
     let (key, sk) = sk.split_at(SEEDBYTES);
     let (tr, sk) = sk.split_at(SEEDBYTES);
@@ -59,7 +57,7 @@ pub(crate) fn sk_split<'a>(
     let (s2, sk) = sk.split_at(p.k * p.eta_poly_packed_len);
     let (t0, sk) = sk.split_at(p.k * p.t0_poly_packed_len);
     debug_assert_eq!(sk.len(), 0);
-    
+
     (rho, key, tr, s1, s2, t0)
 }
 
@@ -124,7 +122,6 @@ pub(crate) fn unpack_pk(p: &DilithiumParams, rho: &mut [u8], t1: &mut [poly::Pol
     debug_assert_eq!(rho.len(), SEEDBYTES);
     debug_assert_eq!(t1.len(), p.k);
     debug_assert_eq!(pk.len(), p.public_key_len);
-
 
     let mut offset = 0;
     rho.copy_from_slice(&pk[offset..offset + SEEDBYTES]);
@@ -415,10 +412,18 @@ pub(crate) fn pack_polyvec_w1(p: &DilithiumParams, w1packed: &mut [u8], w1: &[po
     debug_assert_eq!(offset, p.k * p.w1_poly_packed_len);
 }
 
+/// Bit-pack polynomial w1 with coefficients in 0..=15 or 0..=43.
+/// Input coefficients are assumed to be standard representatives.
 pub(crate) fn pack_poly_w1(p: &DilithiumParams, w1packed: &mut [u8], poly: &poly::Poly) {
     debug_assert_eq!(w1packed.len(), p.w1_poly_packed_len);
 
     if p.gamma2 == (Q - 1) / 88 {
+        debug_assert!(
+            poly.coeffs.iter().all(|&x| 0 <= x && x <= 43),
+            "poly exceeds bounds of 0..=43 ({:?}...)",
+            &poly.coeffs[0..8]
+        );
+
         let w1packed_chunks = w1packed.chunks_exact_mut(3);
         let poly_chunks = poly.coeffs.chunks_exact(4);
         for (w1packed_chunk, poly_chunk) in Iterator::zip(w1packed_chunks, poly_chunks) {
@@ -430,6 +435,12 @@ pub(crate) fn pack_poly_w1(p: &DilithiumParams, w1packed: &mut [u8], poly: &poly
             w1packed_chunk[2] |= (poly_chunk[3] << 2) as u8;
         }
     } else if p.gamma2 == (Q - 1) / 32 {
+        debug_assert!(
+            poly.coeffs.iter().all(|&x| 0 <= x && x <= 15),
+            "poly exceeds bounds of 0..=15 ({:?}...)",
+            &poly.coeffs[0..8]
+        );
+
         let poly_chunks = poly.coeffs.chunks_exact(2);
         for (w1packed_byte, poly_chunk) in Iterator::zip(w1packed.iter_mut(), poly_chunks) {
             *w1packed_byte = (poly_chunk[0] | (poly_chunk[1] << 4)) as u8;
@@ -439,8 +450,51 @@ pub(crate) fn pack_poly_w1(p: &DilithiumParams, w1packed: &mut [u8], poly: &poly
     }
 }
 
+/// Pack an unsigned polynomial `poly` with positive coefficients mod q into
+/// `packed`.
+pub(crate) fn pack_poly_q(packed: &mut [u8], poly: &poly::Poly) {
+    debug_assert_eq!(packed.len(), 23 * N / 8);
+    debug_assert!(poly.coeffs.iter().all(|&x| 0 <= x && x < Q));
+
+    let dest = packed.chunks_exact_mut(8 * 23);
+    let src = poly.coeffs.chunks_exact(8);
+    for (packed_chunk, poly_chunk) in Iterator::zip(dest, src) {
+        packed_chunk[0] = poly_chunk[0] as u8;
+        packed_chunk[1] = (poly_chunk[0] >> 8) as u8;
+        packed_chunk[2] = (poly_chunk[0] >> 16) as u8 & 0x7F;
+        packed_chunk[2] |= (poly_chunk[1] << 7) as u8;
+        packed_chunk[3] = (poly_chunk[1] >> 1) as u8;
+        packed_chunk[4] = (poly_chunk[1] >> 9) as u8;
+        packed_chunk[5] = (poly_chunk[1] >> 17) as u8 & 0x3F;
+        packed_chunk[5] |= (poly_chunk[2] << 6) as u8;
+        packed_chunk[6] = (poly_chunk[2] >> 2) as u8;
+        packed_chunk[7] = (poly_chunk[2] >> 10) as u8;
+        packed_chunk[8] = (poly_chunk[2] >> 18) as u8 & 0x1F;
+        packed_chunk[8] |= (poly_chunk[3] << 5) as u8;
+        packed_chunk[9] = (poly_chunk[3] >> 3) as u8;
+        packed_chunk[10] = (poly_chunk[3] >> 11) as u8;
+        packed_chunk[11] = (poly_chunk[3] >> 19) as u8 & 0x0F;
+        packed_chunk[11] |= (poly_chunk[4] << 4) as u8;
+        packed_chunk[12] = (poly_chunk[4] >> 4) as u8;
+        packed_chunk[13] = (poly_chunk[4] >> 12) as u8;
+        packed_chunk[14] = (poly_chunk[4] >> 20) as u8 & 0x07;
+        packed_chunk[14] |= (poly_chunk[5] << 3) as u8;
+        packed_chunk[15] = (poly_chunk[5] >> 5) as u8;
+        packed_chunk[16] = (poly_chunk[5] >> 13) as u8;
+        packed_chunk[17] = (poly_chunk[5] >> 21) as u8 & 0x03;
+        packed_chunk[17] |= (poly_chunk[6] << 2) as u8;
+        packed_chunk[18] = (poly_chunk[6] >> 6) as u8;
+        packed_chunk[19] = (poly_chunk[6] >> 14) as u8;
+        packed_chunk[20] = (poly_chunk[6] >> 22) as u8 & 0x01;
+        packed_chunk[20] |= (poly_chunk[7] << 1) as u8;
+        packed_chunk[21] = (poly_chunk[7] >> 7) as u8;
+        packed_chunk[22] = (poly_chunk[7] >> 15) as u8;
+    }
+}
+
 pub(crate) fn pack_poly_z(p: &DilithiumParams, packed: &mut [u8], poly: &poly::Poly) {
     debug_assert_eq!(packed.len(), p.z_poly_packed_len);
+    debug_assert!(poly.coeffs.iter().all(|&x| -p.gamma1 < x && x < p.gamma1));
 
     if p.gamma1 == 2i32.pow(17) {
         let dest = packed.chunks_exact_mut(9);

@@ -1,5 +1,3 @@
-use core::hint;
-
 use crate::{keccak, packing, poly};
 use crate::{params::*, reduce};
 use digest::{ExtendableOutput, Update, XofReader};
@@ -366,8 +364,6 @@ fn dilithium_verify<
 mod tests {
     #![deny(_old_code)]
 
-    extern crate std;
-
     use super::*;
     use signature::{Signer, Verifier};
 
@@ -380,33 +376,75 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_message() {
+    fn test_empty_message_dilithium2() {
+        test_empty_message(
+            &DILITHIUM2,
+            dilithium2_keygen_from_seed,
+            dilithium2_signature,
+            dilithium2_verify,
+            crystals_dilithium_sys::dilithium2::pqcrystals_dilithium2_ref_signature,
+        );
+    }
+
+    #[test]
+    fn test_empty_message_dilithium3() {
+        test_empty_message(
+            &DILITHIUM3,
+            dilithium3_keygen_from_seed,
+            dilithium3_signature,
+            dilithium3_verify,
+            crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_signature,
+        );
+    }
+
+    #[test]
+    fn test_empty_message_dilithium5() {
+        test_empty_message(
+            &DILITHIUM5,
+            dilithium5_keygen_from_seed,
+            dilithium5_signature,
+            dilithium5_verify,
+            crystals_dilithium_sys::dilithium5::pqcrystals_dilithium5_ref_signature,
+        );
+    }
+
+    fn test_empty_message(
+        p: &'static DilithiumParams,
+        keygen: fn(sk: &mut [u8], pk: &mut [u8], seed: &[u8]) -> Result<(), crate::Error>,
+        signature: fn(sk: &[u8], m: &[u8], sig: &mut [u8]) -> Result<(), crate::Error>,
+        verify: fn(pk: &[u8], m: &[u8], sig: &[u8]) -> Result<(), crate::Error>,
+        ref_signature: unsafe extern "C" fn(
+            sig: *mut u8,
+            siglen: *mut usize,
+            m: *const u8,
+            mlen: usize,
+            sk: *const u8,
+        ) -> ::core::ffi::c_int,
+    ) {
         let seed = [0; SEEDBYTES];
-        let mut sk = [0; DILITHIUM3.secret_key_len];
-        let mut pk = [0; DILITHIUM3.public_key_len];
-        let mut sig = [0; DILITHIUM3.signature_len];
+        let mut sk = vec![0; p.secret_key_len].into_boxed_slice();
+        let mut pk = vec![0; p.public_key_len].into_boxed_slice();
+        let mut sig_expected = vec![0; p.signature_len].into_boxed_slice();
+        let mut sig_actual = vec![0; p.signature_len].into_boxed_slice();
+        let mut siglen = 0;
 
-        dilithium3_keygen_from_seed(&mut sk, &mut pk, &seed);
+        keygen(&mut sk, &mut pk, &seed).expect("keygen failed");
 
-        let sigbytes_expected = unsafe {
-            let mut sig = [0; DILITHIUM3.signature_len];
-            let mut siglen = 0;
-            crystals_dilithium_sys::dilithium3::pqcrystals_dilithium3_ref_signature(
-                sig.as_mut_ptr(),
+        unsafe {
+            ref_signature(
+                sig_expected.as_mut_ptr(),
                 &mut siglen,
                 [].as_ptr(),
                 0,
                 sk.as_ptr(),
             );
-            assert_eq!(siglen, DILITHIUM3.signature_len, "siglen mismatch");
-            sig
-        };
+        }
+        assert_eq!(siglen, p.signature_len, "siglen mismatch");
 
-        dilithium3_signature(&sk, &[], &mut sig);
+        signature(&sk, &[], &mut sig_actual).expect("sign failed");
+        assert_eq!(&sig_actual[..], &sig_expected[..], "signature mismatch");
 
-        assert_eq!(&sig[..], &sigbytes_expected[..], "signature mismatch");
-
-        let verified = dilithium3_verify(&pk, &[], &sig);
+        let verified = verify(&pk, &[], &sig_actual);
         assert!(verified.is_ok())
     }
 }
