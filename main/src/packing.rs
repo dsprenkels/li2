@@ -492,6 +492,98 @@ pub(crate) fn pack_poly_q(packed: &mut [u8], poly: &poly::Poly) {
     }
 }
 
+/// Unpack a polynomial with coefficients in [0, Q) from `packed` into `poly`.
+#[cfg(feature = "ring")]
+pub(crate) fn unpack_poly_q(poly: &mut poly::Poly, packed: &[u8]) {
+    debug_assert_eq!(packed.len(), 23 * N / 8);
+
+    let dest = poly.coeffs.chunks_exact_mut(8);
+    let src = packed.chunks_exact(8 * 23);
+    for (poly_chunk, packed_chunk) in Iterator::zip(dest, src) {
+        poly_chunk[0] = packed_chunk[0] as i32;
+        poly_chunk[0] |= (packed_chunk[1] as i32) << 8;
+        poly_chunk[0] |= ((packed_chunk[2] & 0x7F) as i32) << 16;
+        poly_chunk[1] = (packed_chunk[2] >> 7) as i32;
+        poly_chunk[1] |= (packed_chunk[3] as i32) << 1;
+        poly_chunk[1] |= (packed_chunk[4] as i32) << 9;
+        poly_chunk[1] |= ((packed_chunk[5] & 0x3F) as i32) << 17;
+        poly_chunk[2] = (packed_chunk[5] >> 6) as i32;
+        poly_chunk[2] |= (packed_chunk[6] as i32) << 2;
+        poly_chunk[2] |= (packed_chunk[7] as i32) << 10;
+        poly_chunk[2] |= ((packed_chunk[8] & 0x1F) as i32) << 18;
+        poly_chunk[3] = (packed_chunk[8] >> 5) as i32;
+        poly_chunk[3] |= (packed_chunk[9] as i32) << 3;
+        poly_chunk[3] |= (packed_chunk[10] as i32) << 11;
+        poly_chunk[3] |= ((packed_chunk[11] & 0x0F) as i32) << 19;
+        poly_chunk[4] = (packed_chunk[11] >> 4) as i32;
+        poly_chunk[4] |= (packed_chunk[12] as i32) << 4;
+        poly_chunk[4] |= (packed_chunk[13] as i32) << 12;
+        poly_chunk[4] |= ((packed_chunk[14] & 0x07) as i32) << 20;
+        poly_chunk[5] = (packed_chunk[14] >> 3) as i32;
+        poly_chunk[5] |= (packed_chunk[15] as i32) << 5;
+        poly_chunk[5] |= (packed_chunk[16] as i32) << 13;
+        poly_chunk[5] |= ((packed_chunk[17] & 0x03) as i32) << 21;
+        poly_chunk[6] = (packed_chunk[17] >> 2) as i32;
+        poly_chunk[6] |= (packed_chunk[18] as i32) << 6;
+        poly_chunk[6] |= (packed_chunk[19] as i32) << 14;
+        poly_chunk[6] |= ((packed_chunk[20] & 0x01) as i32) << 22;
+        poly_chunk[7] = (packed_chunk[20] >> 1) as i32;
+        poly_chunk[7] |= (packed_chunk[21] as i32) << 7;
+        poly_chunk[7] |= (packed_chunk[22] as i32) << 15;
+    }
+}
+
+/// Unpack a polynomial with coefficients in 0..Q from `packed` into `poly`.
+/// Returns true if any coefficients are out of bounds.
+#[cfg(feature = "ring")]
+pub(crate) fn unpack_poly_q_checked(
+    poly: &mut poly::Poly,
+    packed: &[u8],
+) -> bool {
+    debug_assert_eq!(packed.len(), 23 * N / 8);
+
+    let mut out_of_bounds =false;
+    let dest = poly.coeffs.chunks_exact_mut(8);
+    let src = packed.chunks_exact(8 * 23);
+
+    for (poly_chunk, packed_chunk) in Iterator::zip(dest, src) {
+        poly_chunk[0] = packed_chunk[0] as i32;
+        poly_chunk[0] |= (packed_chunk[1] as i32) << 8;
+        poly_chunk[0] |= ((packed_chunk[2] & 0x7F) as i32) << 16;
+        poly_chunk[1] = (packed_chunk[2] >> 7) as i32;
+        poly_chunk[1] |= (packed_chunk[3] as i32) << 1;
+        poly_chunk[1] |= (packed_chunk[4] as i32) << 9;
+        poly_chunk[1] |= ((packed_chunk[5] & 0x3F) as i32) << 17;
+        poly_chunk[2] = (packed_chunk[5] >> 6) as i32;
+        poly_chunk[2] |= (packed_chunk[6] as i32) << 2;
+        poly_chunk[2] |= (packed_chunk[7] as i32) << 10;
+        poly_chunk[2] |= ((packed_chunk[8] & 0x1F) as i32) << 18;
+        poly_chunk[3] = (packed_chunk[8] >> 5) as i32;
+        poly_chunk[3] |= (packed_chunk[9] as i32) << 3;
+        poly_chunk[3] |= (packed_chunk[10] as i32) << 11;
+        poly_chunk[3] |= ((packed_chunk[11] & 0x0F) as i32) << 19;
+        poly_chunk[4] = (packed_chunk[11] >> 4) as i32;
+        poly_chunk[4] |= (packed_chunk[12] as i32) << 4;
+        poly_chunk[4] |= (packed_chunk[13] as i32) << 12;
+        poly_chunk[4] |= ((packed_chunk[14] & 0x07) as i32) << 20;
+        poly_chunk[5] = (packed_chunk[14] >> 3) as i32;
+        poly_chunk[5] |= (packed_chunk[15] as i32) << 5;
+        poly_chunk[5] |= (packed_chunk[16] as i32) << 13;
+        poly_chunk[5] |= ((packed_chunk[17] & 0x03) as i32) << 21;
+        poly_chunk[6] = (packed_chunk[17] >> 2) as i32;
+        poly_chunk[6] |= (packed_chunk[18] as i32) << 6;
+        poly_chunk[6] |= (packed_chunk[19] as i32) << 14;
+        poly_chunk[6] |= ((packed_chunk[20] & 0x01) as i32) << 22;
+        poly_chunk[7] = (packed_chunk[20] >> 1) as i32;
+        poly_chunk[7] |= (packed_chunk[21] as i32) << 7;
+        poly_chunk[7] |= (packed_chunk[22] as i32) << 15;
+        if poly_chunk.iter().any(|&x| !(0 <= x && x < Q)) {
+            out_of_bounds = true;
+        }
+    }
+    out_of_bounds
+}
+
 pub(crate) fn pack_poly_z(p: &DilithiumParams, packed: &mut [u8], poly: &poly::Poly) {
     debug_assert_eq!(packed.len(), p.z_poly_packed_len);
     debug_assert!(poly.coeffs.iter().all(|&x| -p.gamma1 < x && x < p.gamma1));
@@ -507,13 +599,13 @@ pub(crate) fn pack_poly_z(p: &DilithiumParams, packed: &mut [u8], poly: &poly::P
 
             packed_chunk[0] = (t0) as u8;
             packed_chunk[1] = (t0 >> 8) as u8;
-            packed_chunk[2] = (t0 >> 16) as u8;
+            packed_chunk[2] = (t0 >> 16) as u8 & 0x03;
             packed_chunk[2] |= (t1 << 2) as u8;
             packed_chunk[3] = (t1 >> 6) as u8;
-            packed_chunk[4] = (t1 >> 14) as u8;
+            packed_chunk[4] = (t1 >> 14) as u8 & 0x0F;
             packed_chunk[4] |= (t2 << 4) as u8;
             packed_chunk[5] = (t2 >> 4) as u8;
-            packed_chunk[6] = (t2 >> 12) as u8;
+            packed_chunk[6] = (t2 >> 12) as u8 & 0x3F;
             packed_chunk[6] |= (t3 << 6) as u8;
             packed_chunk[7] = (t3 >> 2) as u8;
             packed_chunk[8] = (t3 >> 10) as u8;
@@ -527,7 +619,7 @@ pub(crate) fn pack_poly_z(p: &DilithiumParams, packed: &mut [u8], poly: &poly::P
 
             zpacked_chunk[0] = (t0) as u8;
             zpacked_chunk[1] = (t0 >> 8) as u8;
-            zpacked_chunk[2] = (t0 >> 16) as u8;
+            zpacked_chunk[2] = (t0 >> 16) as u8 & 0x0F;
             zpacked_chunk[2] |= (t1 << 4) as u8;
             zpacked_chunk[3] = (t1 >> 4) as u8;
             zpacked_chunk[4] = (t1 >> 12) as u8;

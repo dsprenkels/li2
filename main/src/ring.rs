@@ -249,7 +249,7 @@ fn dilithium_ring_signature_inner<
     pk: &RingPubKey<K>,
     other_pubkeys: &[RingPubKey<K>],
     msg: &[u8],
-) -> vec::Vec<RingSigCtx<L, K, W1PACKEDLEN>>
+) -> Vec<RingSigCtx<L, K, W1PACKEDLEN>>
 where
     R: rand::RngCore + rand::CryptoRng,
 {
@@ -257,8 +257,8 @@ where
     assert!(other_pubkeys.windows(2).all(|w| w[0].rho < w[1].rho));
 
     // Simulate other signatures
-    let mut ringsigs: vec::Vec<RingSigCtx<L, K, W1PACKEDLEN>> = vec::Vec::new();
-    let mut other_pubkeys = vec::Vec::from(other_pubkeys);
+    let mut ringsigs: Vec<RingSigCtx<L, K, W1PACKEDLEN>> = Vec::new();
+    let mut other_pubkeys = Vec::from(other_pubkeys);
     other_pubkeys.sort_by_key(|pk| pk.rho);
     for pubkey in &other_pubkeys {
         ringsigs.push(dilithium_ring_simulate::<K, L, KL, W1PACKEDLEN, R>(
@@ -275,7 +275,7 @@ where
     let participants = u32::try_from(other_pubkeys.len() + 1).expect("too many ring participants");
     xof.update(&participants.to_le_bytes());
     // Absorb rho for each public key
-    let mut rhos = ringsigs.iter().map(|cx| cx.rho).collect::<vec::Vec<_>>();
+    let mut rhos = ringsigs.iter().map(|cx| cx.rho).collect::<Vec<_>>();
     rhos.push(pk.rho);
     rhos.sort();
     let mu = compute_mu(&rhos, msg);
@@ -402,7 +402,7 @@ where
     let mut w1 = [poly::Poly::zero(); K];
     let mut w0 = [poly::Poly::zero(); K];
     let mut h = [poly::Poly::zero(); K];
-    let mut cp = poly::Poly::zero();
+    let mut cp;
     let mut keccak = keccak::KeccakState::default();
     let mut rhoprime = [0; CRHBYTES];
 
@@ -448,13 +448,13 @@ where
         }
 
         // Make sorted list of commitments
-        let mut commitments = vec::Vec::new();
+        let mut commitments = Vec::with_capacity(simulated.len() + 1);
         for cx in simulated {
             commitments.push((cx.rho, cx.w1packed));
         }
         commitments.push((pk.rho, w1packed));
         commitments.sort_by_key(|(rho, _)| *rho);
-        let commitments: vec::Vec<[[u8; W1PACKEDLEN]; K]> = commitments
+        let commitments: Vec<[[u8; W1PACKEDLEN]; K]> = commitments
             .into_iter()
             .map(|(_, w1packed)| w1packed)
             .collect();
@@ -559,11 +559,11 @@ fn dilithium_ring_verify<
     let keccak = &mut crate::keccak::KeccakState::default();
 
     // Compute mu
-    let rhos = pks.iter().map(|pk| pk.rho).collect::<vec::Vec<_>>();
+    let rhos = pks.iter().map(|pk| pk.rho).collect::<Vec<_>>();
     let mu = compute_mu(&rhos, msg);
 
     // For all signatures, compute the corresponding commitments
-    let mut commitments = vec::Vec::with_capacity(sig.len());
+    let mut commitments = Vec::with_capacity(sig.len());
     for (pk, part) in Iterator::zip(pks.iter(), sig.iter()) {
         // Check z norm
         if poly::polyvec_chknorm(&part.z, p.gamma1 - p.beta).is_err() {
@@ -705,8 +705,8 @@ mod tests {
         seed: u64,
     ) -> (
         (RingSecretKey<L, K>, RingPubKey<K>),
-        vec::Vec<RingPubKey<K>>,
-        vec::Vec<RingSigCtx<L, K, W1PACKEDLEN>>,
+        Vec<RingPubKey<K>>,
+        Vec<RingSigCtx<L, K, W1PACKEDLEN>>,
     ) {
         let mut rng = NotRandom { i: seed };
         let mut seed1 = [0u8; 32];
