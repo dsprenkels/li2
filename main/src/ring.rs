@@ -9,7 +9,6 @@ use crate::{params::*, rounding};
 use core::usize;
 use digest::{ExtendableOutput, Update, XofReader};
 use rand::{self, Rng};
-use std::vec;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
@@ -20,6 +19,30 @@ pub struct RingSecretKey<const L: usize, const K: usize> {
     s2: [poly::Poly; K],
 }
 
+impl<const L: usize, const K: usize> RingSecretKey<L, K> {
+    fn write(&self, p: &DilithiumParams, mut buf: &mut [u8]) {
+        debug_assert_eq!(buf.len(), p.ring_public_key_len);
+        for poly in Iterator::chain(self.s1.iter(), self.s2.iter()) {
+            packing::pack_poly_eta(p, &mut buf[..p.eta_poly_packed_len], poly);
+            buf = &mut buf[p.eta_poly_packed_len..];
+        }
+        debug_assert_eq!(buf.len(), 0);
+    }
+
+    fn from_bytes(p: &DilithiumParams, mut buf: &[u8]) -> Self {
+        debug_assert_eq!(buf.len(), p.ring_secret_key_len);
+        let mut sk = Self {
+            s1: [poly::Poly::zero(); L],
+            s2: [poly::Poly::zero(); K],
+        };
+        for poly in Iterator::chain(sk.s1.iter_mut(), sk.s2.iter_mut()) {
+            packing::unpack_poly_eta(p, poly, &buf[..p.eta_poly_packed_len]);
+            buf = &buf[p.eta_poly_packed_len..];
+        }
+        sk
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct RingPubKey<const K: usize> {
@@ -28,12 +51,70 @@ pub struct RingPubKey<const K: usize> {
     t: [poly::Poly; K],
 }
 
+impl<const K: usize> RingPubKey<K> {
+    fn write(&self, p: &DilithiumParams, mut buf: &mut [u8]) {
+        debug_assert_eq!(buf.len(), p.ring_public_key_len);
+        buf[..SEEDBYTES].copy_from_slice(&self.rho);
+        buf = &mut buf[SEEDBYTES..];
+        for poly in self.t.iter() {
+            packing::pack_poly_q(&mut buf[..Q_POLY_PACKED_LEN], poly);
+            buf = &mut buf[Q_POLY_PACKED_LEN..];
+        }
+        debug_assert_eq!(buf.len(), 0);
+    }
+
+    fn from_bytes(p: &DilithiumParams, mut buf: &[u8]) -> Self {
+        debug_assert_eq!(buf.len(), p.ring_public_key_len);
+        let mut pk = Self {
+            rho: [0; SEEDBYTES],
+            t: [poly::Poly::zero(); K],
+        };
+        pk.rho.copy_from_slice(&buf[..SEEDBYTES]);
+        buf = &buf[SEEDBYTES..];
+        for poly in pk.t.iter_mut() {
+            packing::unpack_poly_q(poly, &buf[..Q_POLY_PACKED_LEN]);
+            buf = &buf[Q_POLY_PACKED_LEN..];
+        }
+        debug_assert_eq!(buf.len(), 0);
+        pk
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct RingSigPart<const L: usize, const K: usize> {
     ctilde: [u8; SEEDBYTES],
     #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     z: [poly::Poly; L],
+}
+
+impl<const L: usize, const K: usize> RingSigPart<L, K> {
+    fn write(&self, p: &DilithiumParams, mut buf: &mut [u8]) {
+        debug_assert_eq!(buf.len(), p.ring_signature_part_len);
+        buf[..SEEDBYTES].copy_from_slice(&self.ctilde);
+        buf = &mut buf[SEEDBYTES..];
+        for poly in self.z.iter() {
+            packing::pack_poly_z(p, buf, poly);
+            buf = &mut buf[p.z_poly_packed_len..];
+        }
+        debug_assert_eq!(buf.len(), 0);
+    }
+
+    fn from_bytes(p: &DilithiumParams, mut buf: &[u8]) -> Self {
+        debug_assert_eq!(buf.len(), p.ring_signature_part_len);
+        let mut sig = Self {
+            ctilde: [0; SEEDBYTES],
+            z: [poly::Poly::zero(); L],
+        };
+        sig.ctilde.copy_from_slice(&buf[..SEEDBYTES]);
+        buf = &buf[SEEDBYTES..];
+        for poly in sig.z.iter_mut() {
+            packing::unpack_poly_z(p, poly, buf);
+            buf = &buf[p.z_poly_packed_len..];
+        }
+        debug_assert_eq!(buf.len(), 0);
+        sig
+    }
 }
 
 pub type RingSig<const L: usize, const K: usize> = Vec<RingSigPart<L, K>>;
@@ -730,6 +811,51 @@ mod tests {
         ((sk0, pk0), pks, sig)
     }
 
+    fn setup_sig_packed<
+        const L: usize,
+        const K: usize,
+        const KL: usize,
+        const W1PACKEDLEN: usize,
+    >(
+        p: &DilithiumParams,
+        seed: u64,
+    ) -> (
+        // Secret key, public key
+        (Box<[u8]>, Box<[u8]>),
+        // Public keys
+        Vec<Box<[u8]>>,
+        // Signature parts
+        Vec<Box<[u8]>>,
+    ) {
+        let ((sk, pk), pks, ctx) = setup_sig::<L, K, KL, W1PACKEDLEN>(p, seed);
+        let sigparts = ctx_to_sig(&ctx);
+        let mut sk_packed = vec![0; p.ring_secret_key_len];
+        let mut pk_packed = vec![0; p.ring_public_key_len];
+        let mut pks_packed = vec![vec![0; p.ring_public_key_len]; pks.len()];
+        let mut sig_packed = vec![vec![0; p.ring_signature_part_len]; sigparts.len()];
+
+        sk.write(p, &mut sk_packed);
+        pk.write(p, &mut pk_packed);
+        for (idx, pk) in pks.iter().enumerate() {
+            pk.write(p, &mut pks_packed[idx]);
+        }
+        for (idx, part) in sigparts.iter().enumerate() {
+            part.write(p, &mut sig_packed[idx]);
+        }
+
+        let sk_packed = sk_packed.into_boxed_slice();
+        let pk_packed = pk_packed.into_boxed_slice();
+        let pks_packed = pks_packed
+            .into_iter()
+            .map(|pk| pk.into_boxed_slice())
+            .collect();
+        let sig_packed = sig_packed
+            .into_iter()
+            .map(|sig| sig.into_boxed_slice())
+            .collect();
+        ((sk_packed, pk_packed), pks_packed, sig_packed)
+    }
+
     #[test]
     fn test_challenges_sum() {
         const P: DilithiumParams = DILITHIUM2;
@@ -764,6 +890,43 @@ mod tests {
             assert!(sig.windows(2).all(|w| w[0].rho < w[1].rho));
 
             let sig = ctx_to_sig(&sig);
+            let verified = dilithium_ring_verify::<
+                { P.l },
+                { P.k },
+                { P.l * P.k },
+                { P.w1_poly_packed_len },
+            >(&P, &pks, &[], &sig);
+            assert!(verified);
+        }
+    }
+
+    #[test]
+    fn test_verify_packed() {
+        const P: DilithiumParams = DILITHIUM2;
+        for i in 0..TESTS {
+            let ((sk_packed, pk_packed), pks_packed, sig_packed) =
+                setup_sig_packed::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(
+                    &P, i,
+                );
+
+            // Decode own keypair
+            let _ = RingSecretKey::<{ P.l }, { P.k }>::from_bytes(&P, &sk_packed);
+            let _ = RingPubKey::<{ P.k }>::from_bytes(&P, &pk_packed);
+            let pks = Vec::from_iter(
+                pks_packed
+                    .into_iter()
+                    .map(|buf| RingPubKey::from_bytes(&P, &buf)),
+            );
+            let sig = Vec::from_iter(
+                sig_packed
+                    .into_iter()
+                    .map(|buf| RingSigPart::<{ P.l }, { P.k }>::from_bytes(&P, &buf)),
+            );
+
+            // Check that the public keys are sorted
+            assert!(pks
+                .windows(2)
+                .all(|w: &[RingPubKey<{ P.k }>]| w[0].rho < w[1].rho));
 
             let verified = dilithium_ring_verify::<
                 { P.l },
@@ -771,8 +934,6 @@ mod tests {
                 { P.l * P.k },
                 { P.w1_poly_packed_len },
             >(&P, &pks, &[], &sig);
-
-            // Assert that sig.rhos are sorted
             assert!(verified);
         }
     }

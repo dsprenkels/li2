@@ -88,11 +88,11 @@ pub(crate) fn unpack_sk(
     offset += SEEDBYTES;
 
     for poly in s1.iter_mut() {
-        decode_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
+        unpack_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
         offset += p.eta_poly_packed_len;
     }
     for poly in s2.iter_mut() {
-        decode_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
+        unpack_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);
         offset += p.eta_poly_packed_len;
     }
     for poly in t0.iter_mut() {
@@ -229,7 +229,7 @@ pub(crate) fn pack_poly_eta(p: &DilithiumParams, sk: &mut [u8], poly: &poly::Pol
     }
 }
 
-pub(crate) fn decode_poly_eta(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
+pub(crate) fn unpack_poly_eta(p: &DilithiumParams, poly: &mut poly::Poly, packed: &[u8]) {
     debug_assert_eq!(packed.len(), p.eta_poly_packed_len);
 
     if p.eta == 2 {
@@ -542,7 +542,7 @@ pub(crate) fn unpack_poly_q_checked(
 ) -> bool {
     debug_assert_eq!(packed.len(), 23 * N / 8);
 
-    let mut out_of_bounds =false;
+    let mut out_of_bounds = false;
     let dest = poly.coeffs.chunks_exact_mut(8);
     let src = packed.chunks_exact(8 * 23);
 
@@ -577,9 +577,7 @@ pub(crate) fn unpack_poly_q_checked(
         poly_chunk[7] = (packed_chunk[20] >> 1) as i32;
         poly_chunk[7] |= (packed_chunk[21] as i32) << 7;
         poly_chunk[7] |= (packed_chunk[22] as i32) << 15;
-        if poly_chunk.iter().any(|&x| !(0 <= x && x < Q)) {
-            out_of_bounds = true;
-        }
+        out_of_bounds |= poly_chunk.iter().any(|&x| !(0 <= x && x < Q));
     }
     out_of_bounds
 }
