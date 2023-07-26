@@ -7,12 +7,18 @@ license = "MIT"
 repository = "https://github.com/dsprenkels/li2"
 edition = "2021"
 
+[[bin]]
+name = "pqcgenkat"
+test = false
+bench = false
+path = "tools/pqcgenkat.rs"
+
 [dependencies]
 digest = {version = "0.10.6", default-features = false}
 signature = {version = "1.6.4", default-features = false}
+crystals-dilithium-sys = {path = "../crystals-dilithium-sys"}
 
 [dev-dependencies]
-crystals-dilithium-sys = {path = "../crystals-dilithium-sys"}
 once_cell = "1.16.0"
 rand = "0.8.5"
 static_assertions = "1.1.0"

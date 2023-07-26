@@ -3,3 +3,6 @@
 
 .gdb_history
 .vscode/
+
+PQCsignKAT_Dilithium*.req
+PQCsignKAT_Dilithium*.rsp
