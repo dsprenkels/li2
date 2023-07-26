@@ -62,7 +62,7 @@ pub const DILITHIUM2: DilithiumParams = DilithiumParams {
     w1_poly_packed_len: 192,
     eta_poly_packed_len: 96,
     public_key_len: 1312,
-    secret_key_len: 2528,
+    secret_key_len: 2560,
     signature_len: 2420,
 };
 
@@ -83,7 +83,7 @@ pub const DILITHIUM3: DilithiumParams = DilithiumParams {
     w1_poly_packed_len: 128,
     eta_poly_packed_len: 128,
     public_key_len: 1952,
-    secret_key_len: 4000,
+    secret_key_len: 4032,
     signature_len: 3293,
 };
 
@@ -104,7 +104,7 @@ pub const DILITHIUM5: DilithiumParams = DilithiumParams {
     w1_poly_packed_len: 128,
     eta_poly_packed_len: 96,
     public_key_len: 2592,
-    secret_key_len: 4864,
+    secret_key_len: 4896,
     signature_len: 4595,
 };
 
@@ -148,6 +148,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_dilithium2_params_ref() {
         use refimpl::dilithium2::*;
 
@@ -171,6 +172,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_dilithium3_params_ref() {
         use refimpl::dilithium3::*;
 
@@ -194,6 +196,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_dilithium5_params_ref() {
         use refimpl::dilithium5::*;
 

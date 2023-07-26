@@ -13,7 +13,7 @@ pub(crate) fn pack_sk(
 ) {
     debug_assert_eq!(sk.len(), p.secret_key_len);
     debug_assert_eq!(rho.len(), SEEDBYTES);
-    debug_assert_eq!(tr.len(), SEEDBYTES);
+    debug_assert_eq!(tr.len(), CRHBYTES);
     debug_assert_eq!(key.len(), SEEDBYTES);
     debug_assert_eq!(t0.len(), p.k);
     debug_assert_eq!(s1.len(), p.l);
@@ -24,8 +24,8 @@ pub(crate) fn pack_sk(
     offset += SEEDBYTES;
     sk[offset..offset + SEEDBYTES].copy_from_slice(key);
     offset += SEEDBYTES;
-    sk[offset..offset + SEEDBYTES].copy_from_slice(tr);
-    offset += SEEDBYTES;
+    sk[offset..offset + CRHBYTES].copy_from_slice(tr);
+    offset += CRHBYTES;
 
     for poly in s1 {
         pack_poly_eta(p, &mut sk[offset..offset + p.eta_poly_packed_len], poly);
@@ -74,7 +74,7 @@ pub(crate) fn unpack_sk(
     sk: &[u8],
 ) {
     debug_assert_eq!(rho.len(), SEEDBYTES);
-    debug_assert_eq!(tr.len(), SEEDBYTES);
+    debug_assert_eq!(tr.len(), CRHBYTES);
     debug_assert_eq!(key.len(), SEEDBYTES);
     debug_assert_eq!(t0.len(), p.k);
     debug_assert_eq!(s1.len(), p.l);
@@ -86,8 +86,8 @@ pub(crate) fn unpack_sk(
     offset += SEEDBYTES;
     key.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
     offset += SEEDBYTES;
-    tr.copy_from_slice(&sk[offset..offset + SEEDBYTES]);
-    offset += SEEDBYTES;
+    tr.copy_from_slice(&sk[offset..offset + CRHBYTES]);
+    offset += CRHBYTES;
 
     for poly in s1.iter_mut() {
         decode_poly_eta(p, poly, &sk[offset..offset + p.eta_poly_packed_len]);

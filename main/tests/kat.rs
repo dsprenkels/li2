@@ -6,6 +6,7 @@ use std::sync::Mutex;
 static KAT_RNG_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::default());
 
 #[test]
+#[ignore = "CRYSTALS-Dilithium repo is outdated"]
 fn kat_dilithium2() {
     use crystals_dilithium_sys::dilithium2::*;
 
@@ -102,6 +103,7 @@ fn kat_dilithium2() {
 }
 
 #[test]
+#[ignore = "CRYSTALS-Dilithium repo is outdated"]
 fn kat_dilithium3() {
     use crystals_dilithium_sys::dilithium3::*;
 
@@ -198,6 +200,7 @@ fn kat_dilithium3() {
 }
 
 #[test]
+#[ignore = "CRYSTALS-Dilithium repo is outdated"]
 fn kat_dilithium5() {
     use crystals_dilithium_sys::dilithium5::*;
 

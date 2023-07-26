@@ -60,7 +60,7 @@ fn dilithium_keygen_from_seed<const K: usize, const L: usize, const KL: usize>(
     debug_assert_eq!(seed.len(), SEEDBYTES);
 
     let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
-    let mut tr = [0u8; SEEDBYTES];
+    let mut tr = [0u8; CRHBYTES];
     let mut mat = [poly::Poly::zero(); KL];
     let mut s1 = [poly::Poly::zero(); L];
     let mut s2 = [poly::Poly::zero(); K];
@@ -142,7 +142,7 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
     debug_assert_eq!(KL, K * L);
 
     let mut nonce = 0u16;
-    let mut seedbuf = [0u8; 3 * SEEDBYTES + 2 * CRHBYTES];
+    let mut seedbuf = [0u8; 2 * SEEDBYTES + 3 * CRHBYTES];
     let mut mat = [poly::Poly::zero(); KL];
     let mut s1 = [poly::Poly::zero(); L];
     let mut y = [poly::Poly::zero(); L];
@@ -155,7 +155,7 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
     let mut keccak = keccak::KeccakState::default();
 
     let (rho, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
-    let (tr, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
+    let (tr, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
     let (key, seedbuf) = seedbuf.split_at_mut(SEEDBYTES);
     let (mu, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
     let (rhoprime, seedbuf) = seedbuf.split_at_mut(CRHBYTES);
@@ -171,6 +171,7 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
     // Compute rhoprime := CRH(K || mu)
     let mut xof = keccak::SHAKE256::new(&mut keccak);
     xof.update(key);
+    xof.update(&[0; SEEDBYTES]); // Absorb rnd
     xof.update(mu);
     xof.finalize_xof().read(rhoprime);
 
@@ -291,6 +292,7 @@ fn dilithium_verify<
     let mut buf = [0; KW1POLYPACKEDLEN];
     let mut rho = [0; SEEDBYTES];
     let mut mu = [0; CRHBYTES];
+    let mut tr = [0; CRHBYTES];
     let mut c = [0; SEEDBYTES];
     let mut c2 = [0; SEEDBYTES];
     let mut cp = poly::Poly::zero();
@@ -308,12 +310,11 @@ fn dilithium_verify<
     // Compute tr := H(pk)
     let mut xof = keccak::SHAKE256::new(&mut keccak);
     xof.update(pk_bytes);
-    let tr = &mut &mut mu[0..SEEDBYTES];
-    xof.finalize_xof().read(tr);
+    xof.finalize_xof().read(&mut tr);
 
     // Compute mu := CRH(tr, msg)
     let mut xof = keccak::SHAKE256::new(&mut keccak);
-    xof.update(tr);
+    xof.update(&tr);
     xof.update(m);
     xof.finalize_xof().read(&mut mu);
 
@@ -366,13 +367,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_empty_message() {
         let seed = [0; SEEDBYTES];
         let mut sk = [0; DILITHIUM3.secret_key_len];
         let mut pk = [0; DILITHIUM3.public_key_len];
         let mut sig = [0; DILITHIUM3.signature_len];
 
-        dilithium3_keygen_from_seed(&mut sk, &mut pk, &seed);
+        dilithium3_keygen_from_seed(&mut sk, &mut pk, &seed).expect("keygen");
 
         let sigbytes_expected = unsafe {
             let mut sig = [0; DILITHIUM3.signature_len];
@@ -388,7 +390,7 @@ mod tests {
             sig
         };
 
-        dilithium3_signature(&sk, &[], &mut sig);
+        dilithium3_signature(&sk, &[], &mut sig).expect("signature");
 
         assert_eq!(&sig[..], &sigbytes_expected[..], "signature mismatch");
 
