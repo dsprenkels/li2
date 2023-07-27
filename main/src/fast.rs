@@ -2,26 +2,47 @@ use crate::params::*;
 use crate::{keccak, packing, poly};
 use digest::{ExtendableOutput, Update, XofReader};
 
-// TODO: LEFT HERE
-//
-// Translate everthing from a const table to a dyn impl with 3 structs *that
-// are the memory pools* for the variant implementations.  We will have to
-// add accessors (const and mut) for acessing the fields as slices.
-//
-// Let's then start reimplementing the C functions, I think it is wise to start
-// with all the fips202 code, and then move on to the other code.
-// I expect that we will have to struggle a lot with type conversions, but I
-// believe you can handle that. ;)
-//
-// Wrt generics and constants and everything, here are some guidelines to
-// follow:
-//   * Everything is a slice; or really: no arrays allowed!  All the array
-//     space is allocated in the memory pools by the callers.  The inner
-//     functions should not allocate those themselves, unless their length
-//     is the same for every variant.
-//   * Parameter data should go in a `const` params struct; but
-//     differing functions should use a dyn impl.
-//   * Type info cannot be generic in the inner functions.  (Use slices!)
+#[cfg(feature = "rand")]
+pub fn dilithium2_keygen<R>(sk: &mut [u8], pk: &mut [u8], rng: &mut R) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    const P: DilithiumParams = DILITHIUM2;
+    dilithium_keygen::<{ P.k }, { P.l }, { P.k * P.l }, _>(&P, sk, pk, rng)
+}
+
+#[cfg(feature = "rand")]
+pub fn dilithium3_keygen<R>(sk: &mut [u8], pk: &mut [u8], rng: &mut R) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    const P: DilithiumParams = DILITHIUM3;
+    dilithium_keygen::<{ P.k }, { P.l }, { P.k * P.l }, _>(&P, sk, pk, rng)
+}
+
+#[cfg(feature = "rand")]
+pub fn dilithium5_keygen<R>(sk: &mut [u8], pk: &mut [u8], rng: &mut R) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    const P: DilithiumParams = DILITHIUM5;
+    dilithium_keygen::<{ P.k }, { P.l }, { P.k * P.l }, _>(&P, sk, pk, rng)
+}
+
+#[cfg(feature = "rand")]
+fn dilithium_keygen<const K: usize, const L: usize, const KL: usize, R>(
+    p: &'static DilithiumParams,
+    sk: &mut [u8],
+    pk: &mut [u8],
+    rng: &mut R,
+) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    let mut seed = [0; SEEDBYTES];
+    rng.fill_bytes(&mut seed);
+    dilithium_keygen_from_seed::<K, L, KL>(p, sk, pk, &mut seed)
+}
 
 pub fn dilithium2_keygen_from_seed(
     sk: &mut [u8],
@@ -117,19 +138,70 @@ fn dilithium_keygen_from_seed<const K: usize, const L: usize, const KL: usize>(
 
 pub fn dilithium2_signature(sk: &[u8], m: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM2;
-    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, sig)?;
+    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, &[0; SEEDBYTES], sig)?;
     Ok(())
 }
 
 pub fn dilithium3_signature(sk: &[u8], m: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM3;
-    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, sig)?;
+    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, &[0; SEEDBYTES], sig)?;
     Ok(())
 }
 
 pub fn dilithium5_signature(sk: &[u8], m: &[u8], sig: &mut [u8]) -> Result<(), crate::Error> {
     const P: DilithiumParams = DILITHIUM5;
-    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, sig)?;
+    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, &[0; SEEDBYTES], sig)?;
+    Ok(())
+}
+
+#[cfg(feature = "rand")]
+pub fn dilithium2_signature_randomized<R>(
+    sk: &[u8],
+    m: &[u8],
+    sig: &mut [u8],
+    rng: &mut R,
+) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    const P: DilithiumParams = DILITHIUM2;
+    let mut rnd = [0; SEEDBYTES];
+    rng.fill_bytes(&mut rnd);
+    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, &rnd, sig)?;
+    Ok(())
+}
+
+#[cfg(feature = "rand")]
+pub fn dilithium3_signature_randomized<R>(
+    sk: &[u8],
+    m: &[u8],
+    sig: &mut [u8],
+    rng: &mut R,
+) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    const P: DilithiumParams = DILITHIUM3;
+    let mut rnd = [0; SEEDBYTES];
+    rng.fill_bytes(&mut rnd);
+    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, &rnd, sig)?;
+    Ok(())
+}
+
+#[cfg(feature = "rand")]
+pub fn dilithium5_signature_randomized<R>(
+    sk: &[u8],
+    m: &[u8],
+    sig: &mut [u8],
+    rng: &mut R,
+) -> Result<(), crate::Error>
+where
+    R: rand_core::RngCore + rand_core::CryptoRng,
+{
+    const P: DilithiumParams = DILITHIUM5;
+    let mut rnd = [0; SEEDBYTES];
+    rng.fill_bytes(&mut rnd);
+    dilithium_signature::<{ P.k }, { P.l }, { P.k * P.l }>(&P, sk, m, &rnd, sig)?;
     Ok(())
 }
 
@@ -137,9 +209,11 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
     p: &'static DilithiumParams,
     sk: &[u8],
     m: &[u8],
+    rnd: &[u8],
     sigbytes: &mut [u8],
 ) -> Result<(), crate::Error> {
     debug_assert_eq!(KL, K * L);
+    debug_assert_eq!(rnd.len(), SEEDBYTES);
 
     let mut nonce = 0u16;
     let mut seedbuf = [0u8; 2 * SEEDBYTES + 3 * CRHBYTES];
@@ -171,7 +245,7 @@ fn dilithium_signature<const K: usize, const L: usize, const KL: usize>(
     // Compute rhoprime := CRH(K || mu)
     let mut xof = keccak::SHAKE256::new(&mut keccak);
     xof.update(key);
-    xof.update(&[0; SEEDBYTES]); // Absorb rnd
+    xof.update(rnd);
     xof.update(mu);
     xof.finalize_xof().read(rhoprime);
 
@@ -396,5 +470,45 @@ mod tests {
 
         let verified = dilithium3_verify(&pk, &[], &sig);
         assert!(verified.is_ok())
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn test_dilithium2_randomized_signatures_different() {
+        const p: DilithiumParams = DILITHIUM2;
+        do_test_randomized_signatures_different::<{p.k}, {p.l}, {p.k * p.l}, {p.k * p.w1_poly_packed_len}>(&p);
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn test_dilithium3_randomized_signatures_different() {
+        const p: DilithiumParams = DILITHIUM3;
+        do_test_randomized_signatures_different::<{p.k}, {p.l}, {p.k * p.l}, {p.k * p.w1_poly_packed_len}>(&p);
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn test_dilithium5_randomized_signatures_different() {
+        const p: DilithiumParams = DILITHIUM5;
+        do_test_randomized_signatures_different::<{p.k}, {p.l}, {p.k * p.l}, {p.k * p.w1_poly_packed_len}>(&p);
+    }
+
+    #[cfg(feature = "rand")]
+    fn do_test_randomized_signatures_different<const K:  usize, const L:  usize, const KL:  usize, const KW1POLYPACKEDLEN: usize>(p: &'static DilithiumParams) {
+        let seed = [0; SEEDBYTES];
+        let mut sk = vec![0; p.secret_key_len];
+        let mut pk = vec![0; p.public_key_len];
+        let mut rnd = [0; SEEDBYTES];
+        let mut sig = vec![0; p.signature_len];
+        let mut sig2 = vec![0; p.signature_len];
+
+        dilithium_keygen_from_seed::<K, L, KL>(p, &mut sk, &mut pk, &seed).expect("keygen");
+        dilithium_signature::<K, L, KL>(p, &sk, &[], &rnd, &mut sig).expect("signature");
+        rnd[0] += 1;
+        dilithium_signature::<K, L, KL>(p, &sk, &[], &rnd, &mut sig2).expect("signature");
+
+        assert!(dilithium_verify::<K, L, KL, KW1POLYPACKEDLEN>(p, &pk, &[], &sig).is_ok());
+        assert!(dilithium_verify::<K, L, KL, KW1POLYPACKEDLEN>(p, &pk, &[], &sig2).is_ok());
+        assert_ne!(sig, sig2);
     }
 }

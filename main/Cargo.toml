@@ -17,6 +17,7 @@ path = "tools/pqcgenkat.rs"
 digest = {version = "0.10.6", default-features = false}
 signature = {version = "1.6.4", default-features = false}
 crystals-dilithium-sys = {path = "../crystals-dilithium-sys"}
+rand_core = {version  = "0.6.3", optional = true}
 
 [dev-dependencies]
 once_cell = "1.16.0"
@@ -29,3 +30,4 @@ std = ["digest/std", "signature/std"]
 basic-api = []
 fast = []
 small = ["fast"]
+rand = ["rand_core"]
