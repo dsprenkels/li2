@@ -29,7 +29,6 @@ fn main() {
     for file in files {
         println!("cargo:rerun-if-changed={}", file);
     }
-    drop(files);
 
     // Compile fips202 package
     cc::Build::new()
@@ -45,9 +44,9 @@ fn main() {
         .shared_flag(true)
         .static_flag(true)
         .include("crystals-dilithium/ref")
-        .file("crystals-dilithium/ref/rng.c")
+        .file("crystals-dilithium/ref/nistkat/rng.c")
         .compile("rng");
-    println!("crystals-dilithium/ref/rng.c");
+    println!("crystals-dilithium/ref/nistkat/rng.c");
 
     // Link openssl because of the AES primitive used in rng.c
     println!("cargo:rustc-link-lib=crypto");

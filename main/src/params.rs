@@ -148,7 +148,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_dilithium2_params_ref() {
         use refimpl::dilithium2::*;
 
@@ -172,7 +171,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_dilithium3_params_ref() {
         use refimpl::dilithium3::*;
 
@@ -196,7 +194,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_dilithium5_params_ref() {
         use refimpl::dilithium5::*;
 

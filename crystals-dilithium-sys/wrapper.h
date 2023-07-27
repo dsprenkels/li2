@@ -9,4 +9,4 @@
 #include "crystals-dilithium/ref/reduce.h"
 #include "crystals-dilithium/ref/rounding.h"
 #include "crystals-dilithium/ref/symmetric.h"
-#include "crystals-dilithium/ref/rng.h"
+#include "crystals-dilithium/ref/nistkat/rng.h"

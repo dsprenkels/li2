@@ -441,7 +441,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CRYSTALS-Dilithium repo is outdated"]
     fn test_empty_message() {
         let seed = [0; SEEDBYTES];
         let mut sk = [0; DILITHIUM3.secret_key_len];
