@@ -40,7 +40,7 @@ pub type RingSig<const L: usize, const K: usize> = Vec<RingSigPart<L, K>>;
 
 #[derive(Debug, Clone, Copy)]
 struct RingSigCtx<const L: usize, const K: usize, const W1PACKEDLEN: usize> {
-    rho: [u8; SEEDBYTES],
+    tr: [u8; CRHBYTES],
     z: [poly::Poly; L],
     ctilde: [u8; SEEDBYTES],
     w1packed: [[u8; W1PACKEDLEN]; K],
@@ -144,6 +144,8 @@ fn dilithium_ring_keypair<
 
     // Add error vector s2
     poly::polyvec_add(&mut t, &s2);
+    poly::polyvec_pointwise(&mut t, &mut crate::reduce::reduce32);
+    poly::polyvec_pointwise(&mut t, &mut crate::reduce::caddq);
 
     let mut rhobuf = [0; SEEDBYTES];
 
@@ -267,23 +269,15 @@ where
     }
 
     // Precompute mu
-    let mut keccak = keccak::KeccakState::default();
-    let mut xof = keccak::SHAKE256::new(&mut keccak);
-    // Mitigate length-extension attacks by binding the amount of
-    // participants in the ring signature.
-    // TODO: Absorb tr instead of rho for each public key (or just absorb the whole public key)
-    let participants = u32::try_from(other_pubkeys.len() + 1).expect("too many ring participants");
-    xof.update(&participants.to_le_bytes());
-    // Absorb rho for each public key
-    let mut rhos = ringsigs.iter().map(|cx| cx.rho).collect::<Vec<_>>();
-    rhos.push(pk.rho);
-    rhos.sort();
-    let mu = compute_mu(&rhos, msg);
+    let mut trs = ringsigs.iter().map(|cx| cx.tr).collect::<Vec<_>>();
+    trs.push(compute_tr(p, pk));
+    trs.sort();
+    let mu = compute_mu(&trs, msg);
 
     // Start making the "real" signature
     let real = dilithium_ring_real::<K, L, KL, W1PACKEDLEN, _>(p, rng, sk, pk, &mu, &ringsigs);
     ringsigs.push(real);
-    ringsigs.sort_by_key(|ctx| ctx.rho);
+    ringsigs.sort_by_key(|ctx| ctx.tr);
     ringsigs
 }
 
@@ -369,10 +363,10 @@ where
 
         // Return ~c, w1
         return RingSigCtx {
-            rho: pk.rho,
             z,
             ctilde,
             w1packed,
+            tr: compute_tr(p, pk),
         };
     }
 }
@@ -450,10 +444,10 @@ where
         // Make sorted list of commitments
         let mut commitments = Vec::with_capacity(simulated.len() + 1);
         for cx in simulated {
-            commitments.push((cx.rho, cx.w1packed));
+            commitments.push((cx.tr, cx.w1packed));
         }
-        commitments.push((pk.rho, w1packed));
-        commitments.sort_by_key(|(rho, _)| *rho);
+        commitments.push((compute_tr(p, pk), w1packed));
+        commitments.sort_by_key(|(tr, _)| *tr);
         let commitments: Vec<[[u8; W1PACKEDLEN]; K]> = commitments
             .into_iter()
             .map(|(_, w1packed)| w1packed)
@@ -492,8 +486,8 @@ where
 
         // Write signature
         return RingSigCtx {
+            tr: compute_tr(p, pk),
             ctilde,
-            rho: pk.rho,
             z,
             w1packed,
         };
@@ -549,18 +543,22 @@ fn dilithium_ring_verify<
     const W1PACKEDLEN: usize,
 >(
     p: &DilithiumParams,
-    pks: &[RingPubKey<K>],
+    pks_: &[RingPubKey<K>],
     msg: &[u8],
     sig: &RingSig<L, K>,
 ) -> bool {
     // TODO: `sig` type should be an actual sig (not context)
 
-    assert_eq!(sig.len(), pks.len());
+    assert_eq!(sig.len(), pks_.len());
     let keccak = &mut crate::keccak::KeccakState::default();
 
+    // Sort the public keys in order of tr
+    let mut pks = Vec::from(pks_);
+    pks.sort_by_key(|pk| compute_tr(p, pk));
+
     // Compute mu
-    let rhos = pks.iter().map(|pk| pk.rho).collect::<Vec<_>>();
-    let mu = compute_mu(&rhos, msg);
+    let trs = pks.iter().map(|pk| compute_tr(p, pk)).collect::<Vec<_>>();
+    let mu = compute_mu(&trs, msg);
 
     // For all signatures, compute the corresponding commitments
     let mut commitments = Vec::with_capacity(sig.len());
@@ -602,11 +600,31 @@ fn dilithium_ring_verify<
     true
 }
 
-fn compute_mu(rhos: &[[u8; SEEDBYTES]], msg: &[u8]) -> [u8; CRHBYTES] {
+fn compute_tr<const K: usize>(p: &DilithiumParams, pk: &RingPubKey<K>) -> [u8; CRHBYTES] {
     let mut keccak = crate::keccak::KeccakState::default();
     let mut xof = keccak::SHAKE256::new(&mut keccak);
-    for rho in rhos {
-        xof.update(rho);
+    let mut buf = vec![0; p.ring_public_key_len];
+    let rho_buf = &mut buf[0..SEEDBYTES];
+    rho_buf.copy_from_slice(&pk.rho);
+    let mut t_buf = &mut buf[SEEDBYTES..(SEEDBYTES + K * 23 * N / 8)];
+    for t_elem in pk.t {
+        packing::pack_poly_q(&mut t_buf[..(23 * N / 8)], &t_elem);
+        t_buf = &mut t_buf[(23 * N / 8)..];
+    }
+    debug_assert!(t_buf.is_empty());
+
+    xof.update(&buf);
+    let mut xofread = xof.finalize_xof();
+    let mut tr = [0; CRHBYTES];
+    xofread.read(&mut tr);
+    tr
+}
+
+fn compute_mu(trs: &[[u8; CRHBYTES]], msg: &[u8]) -> [u8; CRHBYTES] {
+    let mut keccak = crate::keccak::KeccakState::default();
+    let mut xof = keccak::SHAKE256::new(&mut keccak);
+    for tr in trs {
+        xof.update(tr);
     }
     xof.update(msg);
     let mut mu = [0; CRHBYTES];
@@ -674,7 +692,7 @@ mod tests {
 
     const TESTS: u64 = 1000;
 
-    impl rand::RngCore for NotRandom {
+    impl RngCore for NotRandom {
         fn next_u32(&mut self) -> u32 {
             self.i += 1;
             self.i as u32
@@ -745,7 +763,9 @@ mod tests {
                 }
             }
 
-            let mu = compute_mu(&[pks[0].rho, pks[1].rho], &[]);
+            let mut trs = [compute_tr(&P, &pks[0]), compute_tr(&P, &pks[1])];
+            trs.sort();
+            let mu = compute_mu(&trs, &[]);
             let ctilde_from_commitments =
                 compute_challenge(&mu, &[sig[0].w1packed, sig[1].w1packed]);
 
@@ -761,7 +781,7 @@ mod tests {
                 setup_sig::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(&P, i);
 
             // Check that the public keys are sorted
-            assert!(sig.windows(2).all(|w| w[0].rho < w[1].rho));
+            assert!(sig.windows(2).all(|w| w[0].tr < w[1].tr));
 
             let sig = ctx_to_sig(&sig);
 
@@ -817,8 +837,8 @@ mod tests {
         xof.finalize_xof().read(&mut hash);
 
         let expected = [
-            17, 110, 187, 23, 243, 129, 67, 65, 133, 92, 63, 229, 63, 205, 13, 13, 79, 35, 245,
-            115, 173, 94, 32, 82, 161, 136, 220, 102, 250, 165, 75, 245,
+            217, 110, 243, 25, 119, 103, 156, 237, 99, 142, 24, 165, 24, 241, 240, 37, 174, 242,
+            46, 236, 206, 156, 172, 57, 171, 118, 137, 85, 125, 160, 237, 180,
         ];
         assert_eq!(hash, expected);
     }

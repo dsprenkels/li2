@@ -4,6 +4,8 @@ pub(crate) const D: u32 = 13;
 
 pub const SEEDBYTES: usize = 32;
 pub(crate) const CRHBYTES: usize = 64;
+#[cfg(feature = "ring")]
+pub(crate) const Q_POLY_PACKED_LEN: usize = 23 * N / 8;
 
 pub trait DilithiumTypes {
     type Poly;
@@ -43,6 +45,13 @@ pub struct DilithiumParams {
     pub public_key_len: usize,
     pub secret_key_len: usize,
     pub signature_len: usize,
+
+    #[cfg(feature = "ring")]
+    pub(crate) ring_secret_key_len: usize,
+    #[cfg(feature = "ring")]
+    pub(crate) ring_public_key_len: usize,
+    #[cfg(feature = "ring")]
+    pub(crate) ring_signature_part_len: usize,
 }
 
 pub const DILITHIUM2: DilithiumParams = DilithiumParams {
@@ -64,6 +73,13 @@ pub const DILITHIUM2: DilithiumParams = DilithiumParams {
     public_key_len: 1312,
     secret_key_len: 2528,
     signature_len: 2420,
+
+    #[cfg(feature = "ring")]
+    ring_secret_key_len: 768,
+    #[cfg(feature = "ring")]
+    ring_public_key_len: 2976,
+    #[cfg(feature = "ring")]
+    ring_signature_part_len: 2336,
 };
 
 pub const DILITHIUM3: DilithiumParams = DilithiumParams {
@@ -85,6 +101,13 @@ pub const DILITHIUM3: DilithiumParams = DilithiumParams {
     public_key_len: 1952,
     secret_key_len: 4000,
     signature_len: 3293,
+
+    #[cfg(feature = "ring")]
+    ring_secret_key_len: 1408,
+    #[cfg(feature = "ring")]
+    ring_public_key_len: 4448,
+    #[cfg(feature = "ring")]
+    ring_signature_part_len: 3232,
 };
 
 pub const DILITHIUM5: DilithiumParams = DilithiumParams {
@@ -106,6 +129,13 @@ pub const DILITHIUM5: DilithiumParams = DilithiumParams {
     public_key_len: 2592,
     secret_key_len: 4864,
     signature_len: 4595,
+
+    #[cfg(feature = "ring")]
+    ring_secret_key_len: 1440,
+    #[cfg(feature = "ring")]
+    ring_public_key_len: 5930,
+    #[cfg(feature = "ring")]
+    ring_signature_part_len: 4512,
 };
 
 #[cfg(test)]
