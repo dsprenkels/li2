@@ -604,6 +604,16 @@ fn compute_tr<const K: usize>(p: &DilithiumParams, pk: &RingPubKey<K>) -> [u8; C
     let mut keccak = crate::keccak::KeccakState::default();
     let mut xof = keccak::SHAKE256::new(&mut keccak);
     let mut buf = vec![0; p.ring_public_key_len];
+    pack_ring_pk(p, &pk, &mut buf);
+    xof.update(&buf);
+    let mut xofread = xof.finalize_xof();
+    let mut tr = [0; CRHBYTES];
+    xofread.read(&mut tr);
+    tr
+}
+
+fn pack_ring_pk<const K: usize>(p: &DilithiumParams, pk: &RingPubKey<K>, buf: &mut [u8]) {
+    debug_assert_eq!(buf.len(), p.ring_public_key_len);
     let rho_buf = &mut buf[0..SEEDBYTES];
     rho_buf.copy_from_slice(&pk.rho);
     let mut t_buf = &mut buf[SEEDBYTES..(SEEDBYTES + K * 23 * N / 8)];
@@ -612,12 +622,6 @@ fn compute_tr<const K: usize>(p: &DilithiumParams, pk: &RingPubKey<K>) -> [u8; C
         t_buf = &mut t_buf[(23 * N / 8)..];
     }
     debug_assert!(t_buf.is_empty());
-
-    xof.update(&buf);
-    let mut xofread = xof.finalize_xof();
-    let mut tr = [0; CRHBYTES];
-    xofread.read(&mut tr);
-    tr
 }
 
 fn compute_mu(trs: &[[u8; CRHBYTES]], msg: &[u8]) -> [u8; CRHBYTES] {
@@ -784,7 +788,6 @@ mod tests {
             assert!(sig.windows(2).all(|w| w[0].tr < w[1].tr));
 
             let sig = ctx_to_sig(&sig);
-
             let verified = dilithium_ring_verify::<
                 { P.l },
                 { P.k },
@@ -793,6 +796,34 @@ mod tests {
             >(&P, &pks, &[], &sig);
 
             // Assert that sig.rhos are sorted
+            assert!(verified);
+        }
+    }
+
+    #[test]
+    fn test_verify_packed() {
+        const P: DilithiumParams = DILITHIUM2;
+        for i in 0..TESTS {
+            let (_, pks, sig_cxs) =
+                setup_sig::<{ P.l }, { P.k }, { P.l * P.k }, { P.w1_poly_packed_len }>(&P, i);
+            let sig = ctx_to_sig(&sig_cxs);
+
+            let pks_encoded = serde_json::to_string(&pks).expect("failed to encode pks");
+            let sig_encoded = serde_json::to_string(&sig).expect("failed to encode sig");
+
+            drop(pks);
+            drop(sig_cxs);
+            drop(sig);
+
+            let pks = serde_json::from_str::<Vec<RingPubKey<{ P.k }>>>(&pks_encoded)
+                .expect("failed to decode pks");
+            let sig = serde_json::from_str(&sig_encoded).expect("failed to decode sig");
+            let verified = dilithium_ring_verify::<
+                { P.l },
+                { P.k },
+                { P.l * P.k },
+                { P.w1_poly_packed_len },
+            >(&P, &pks, &[], &sig);
             assert!(verified);
         }
     }
