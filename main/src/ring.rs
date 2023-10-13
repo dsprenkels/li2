@@ -696,21 +696,35 @@ mod tests {
 
     const TESTS: u64 = 1000;
 
+    impl NotRandom {
+        fn bump(&mut self) {
+            // From https://en.wikipedia.org/wiki/Xorshift
+            let mut x = self.i;
+            if x == 0 {
+                x = u64::MAX;
+            } // Xorshift does not work with 0
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.i = x;
+        }
+    }
+
     impl RngCore for NotRandom {
         fn next_u32(&mut self) -> u32 {
-            self.i += 1;
+            self.bump();
             self.i as u32
         }
 
         fn next_u64(&mut self) -> u64 {
-            self.i += 1;
+            self.bump();
             self.i
         }
 
         fn fill_bytes(&mut self, dest: &mut [u8]) {
             for i in dest.iter_mut() {
+                self.bump();
                 *i = self.i as u8;
-                self.i += 1;
             }
         }
 
@@ -868,8 +882,8 @@ mod tests {
         xof.finalize_xof().read(&mut hash);
 
         let expected = [
-            217, 110, 243, 25, 119, 103, 156, 237, 99, 142, 24, 165, 24, 241, 240, 37, 174, 242,
-            46, 236, 206, 156, 172, 57, 171, 118, 137, 85, 125, 160, 237, 180,
+            87, 36, 163, 218, 78, 17, 205, 140, 79, 221, 205, 205, 137, 32, 125, 168, 248, 58, 202,
+            146, 68, 65, 43, 49, 230, 153, 120, 194, 232, 152, 170, 136,
         ];
         assert_eq!(hash, expected);
     }
